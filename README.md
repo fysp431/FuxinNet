@@ -188,44 +188,10 @@ POST /eportal/InterFace.do?method=login
 │  ├─ auth.py             # pageInfo / RSA / login / 完整认证
 │  ├─ worker.py           # 监控线程与重试状态机
 │  ├─ tray.py             # 系统托盘
-│  ├─ autostart.py        # 开机自启（用户级 / 系统级预留）
+│  ├─ autostart.py        # 开机自启（用户级 / 系统级）
 │  └─ api.py              # 前端桥（轮询 + 保存 + 启停 + 日志）
 └─ tools/selftest.py      # 核心自测（RSA / 转义 / mock 网关 / 配置）
 ```
-
-## 本地开发
-
-> **必须用 Python 3.11**：pythonnet 3.2+ 只提供 netstandard2.1 程序集，.NET Framework 4.8 加载不了；
-> 3.11 + pythonnet 3.0.5 才能走系统自带 .NET Framework，打包后的 exe 也才能"开箱即用"。
-
-```bat
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\pip install pythonnet==3.0.5 pyinstaller
-.venv\Scripts\python run.py
-```
-
-核心逻辑自测（不需要校园网，会在本地起一个 mock ePortal）：
-
-```bat
-.venv\Scripts\python tools\selftest.py
-```
-
-## 打包
-
-```bat
-python -m PyInstaller --noconfirm --clean fuxin.spec
-```
-
-产物：`dist\福信校网通.exe`（单文件）。
-
-已经在 spec/代码里处理掉的三个坑（改配置时别删）：
-
-| 现象 | 原因 | 处理 |
-|---|---|---|
-| `Could not create temporary directory!` | 某些目录/策略下无法用 `%TEMP%` 解包 | spec 里 `runtime_tmpdir="."`，改在 exe 旁解包（退出自动清理） |
-| `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集" | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
-| 窗口白屏 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录 |
 
 ## 运行期文件
 
