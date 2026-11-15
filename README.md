@@ -10,7 +10,7 @@
   <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">
 </p>
 
-![界面截图](docs/screenshot.png)
+![界面截图](screenshot.png)
 
 ---
 
