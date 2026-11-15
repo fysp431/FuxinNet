@@ -212,4 +212,4 @@ POST /eportal/InterFace.do?method=login
 
 **fysp431** · 邮箱 2872058826@qq.com
 
-如果这个小工具帮到了你，点个 ⭐ 就好。
+如果这个小工具帮到了你，点个 star 就好。
