@@ -6,7 +6,6 @@
   <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2f6fed">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4">
   <img alt="python" src="https://img.shields.io/badge/python-3.11-3776ab">
-  <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">
 </p>
 
 ![界面截图](screenshot.png)
