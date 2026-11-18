@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/34867842/README.md)
 # 福信校网通 · FJPIT 校园网自动认证助手
 
 > 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院平潭校区（FJPIT）** 校园网 ePortal 认证打造。
