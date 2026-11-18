@@ -82,27 +82,6 @@
 | 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志） |
 | 日志 | exe 同目录 `fuxin_log.txt`，也可在界面「导出日志」 |
 
-## 工作原理
-
-```
-探测在线？ ──是──> 安静等待下一轮
-    │
-    否
-    ↓
-跟随跳转链（≤6 跳）拿到 index.jsp?wlanuserip=…&mac=…    ← 参数原样回传，不解码再编码
-    ↓
-GET  /eportal/InterFace.do?method=pageInfo&indexParams=…  ← 取 passwordEncrypt / 公钥
-    ↓
-RSA PKCS#1 v1.5 填充 + 裸模幂 → 十进制字符串                ← 网关要求时才加密
-    ↓
-POST /eportal/InterFace.do?method=login
-     userId / password / service="" / passwordEncrypt / queryString
-    ↓
-解析 {"result":"success"} 或 {"result":"fail","message":"…"}（含 \uXXXX 解码）
-    ↓
-每 5 秒复检，最多 60 秒；成功即恢复守护
-```
-
 失败分类处理：**凭据错误**立即停止；**网络类失败** 30 秒后重试，连续 3 次停止。
 
 ## 常见问题
