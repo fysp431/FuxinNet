@@ -126,17 +126,6 @@
 | `认证服务器可达但未获取到认证参数` | 可能网络已经恢复 | 通常可忽略 |
 </details>
 
-## 技术栈
-
-| 层 | 选型 |
-|---|---|
-| UI | HTML + CSS + 原生 JS（WebView2 渲染） |
-| 壳 | pywebview 6 + WinForms |
-| 后端 | Python 3.11（`http.client` 直连，无第三方 HTTP 依赖） |
-| 加密 | cryptography（AES-GCM） |
-| 托盘 | pystray + Pillow |
-| 打包 | PyInstaller（单文件） |
-
 ## 运行期文件
 
 | 文件 | 说明 |
