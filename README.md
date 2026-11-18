@@ -19,8 +19,6 @@
 这个小工具会在后台按你设定的频率探测网络，一旦发现"连着 WiFi 但没认证"，就自动完成 ePortal 网页认证，
 网络恢复后继续静默守护。
 
-界面用 **Python + pywebview** 重写（原生 WebView2 渲染），托盘常驻，仅 21 MB 单文件、免安装。
-
 ## 功能特性
 
 **自动认证**
@@ -39,13 +37,6 @@
 - 只在状态变化时写日志，不会刷屏
 - 检测频率运行中修改即时生效
 
-**界面**
-
-- 卡片式现代 UI：状态徽标、在线/离线、上次检测、失败计数一屏可见
-- 运行中锁定账号与频率，防止误改
-- 保存按钮两态（有改动才可点）、密码显隐
-- 日志实时滚动，支持导出与打开所在目录
-
 **托盘与自启**
 
 - 点 × 隐藏到托盘继续跑；左键恢复窗口；右键「打开主界面 / 退出」
@@ -61,7 +52,7 @@
 
 ## 下载与安装
 
-1. 到 **Releases** 下载 `福信校网通_v2.0.0.exe`（或自行编译，见下文）
+1. 到 **Releases** 下载 `福信校网通_v2.0.0.exe`
 2. **建议放到独立文件夹**，不要直接在桌面双击运行
 3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」
    （程序没有购买代码签名证书，属正常现象）
@@ -166,31 +157,6 @@ POST /eportal/InterFace.do?method=login
 | 加密 | cryptography（AES-GCM） |
 | 托盘 | pystray + Pillow |
 | 打包 | PyInstaller（单文件） |
-
-## 目录结构
-
-```
-.
-├─ run.py                 # 入口（写 .NET app.config → 起界面）
-├─ fuxin.spec             # 单文件打包
-├─ fuxin_portable.spec    # 免解压目录版打包
-├─ requirements.txt
-├─ assets/                # 图标
-├─ docs/                  # 截图
-├─ ui/                    # 前端：index.html / style.css / app.js
-├─ src/fuxin/
-│  ├─ main.py             # DPI、单实例、托盘接线、窗口
-│  ├─ paths.py            # 路径与常量（以 exe 目录为准）
-│  ├─ logger.py           # 日志：文件 + 内存 + 脱敏
-│  ├─ config.py           # 配置：AES-GCM 读写
-│  ├─ net.py              # 直连 HTTP、探测、跳转链
-│  ├─ auth.py             # pageInfo / RSA / login / 完整认证
-│  ├─ worker.py           # 监控线程与重试状态机
-│  ├─ tray.py             # 系统托盘
-│  ├─ autostart.py        # 开机自启（用户级 / 系统级）
-│  └─ api.py              # 前端桥（轮询 + 保存 + 启停 + 日志）
-└─ tools/selftest.py      # 核心自测（RSA / 转义 / mock 网关 / 配置）
-```
 
 ## 运行期文件
 
