@@ -17,8 +17,8 @@ MUTEX_NAME = "FUXIN_XiaoWangTong_Mutex_Py"
 RUN_VALUE_NAME = "福信校网通"
 
 DEFAULT_FREQ = 600
-# 检测频率：最小 1 秒/次，不设上限（整数）
-MIN_FREQ = 1
+# 检测频率：最低 10 秒/次，不设上限（整数）
+MIN_FREQ = 10
 
 # 开机自启时的静默参数：启动后直接驻留托盘，不弹主窗口
 MINIMIZED_FLAG = "--min"

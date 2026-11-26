@@ -36,6 +36,7 @@
 
   const state = {
     running: false,
+    stopping: false,
     phase: "idle",
     online: null,
     failCount: 0,
@@ -63,11 +64,16 @@
   /* ------------------------------------------------------------ 状态渲染 */
   function renderState() {
     const running = state.running;
+    const stopping = !!state.stopping;
+    const locked = running || stopping;
     const authenticating = running && state.phase === "authenticating";
     const checking = running && state.phase === "checking";
 
     el.pill.className = "pill";
-    if (authenticating) {
+    if (stopping) {
+      el.pill.classList.add("working");
+      el.pillText.textContent = "正在停止";
+    } else if (authenticating) {
       el.pill.classList.add("working");
       el.pillText.textContent = "正在认证";
     } else if (running) {
@@ -82,7 +88,8 @@
     }
 
     el.mainBtn.className = "main-btn " + (running ? "running" : "idle");
-    el.mainBtnText.textContent = running ? "停 止" : "启 动";
+    el.mainBtn.disabled = stopping;
+    el.mainBtnText.textContent = stopping ? "停止中…" : running ? "停 止" : "启 动";
 
     if (state.online === true) {
       el.netState.textContent = "在线";
@@ -99,11 +106,11 @@
     el.failCount.textContent = String(state.failCount || 0);
     el.failCount.className = state.failCount > 0 ? "bad" : "";
 
-    el.lockBadge.hidden = !running;
-    el.userInput.disabled = running;
-    el.passInput.disabled = running;
-    el.freqInput.disabled = running;
-    el.eyeBtn.disabled = running;
+    el.lockBadge.hidden = !locked;
+    el.userInput.disabled = locked;
+    el.passInput.disabled = locked;
+    el.freqInput.disabled = locked;
+    el.eyeBtn.disabled = locked;
 
     renderAutoStart();
     refreshSaveButtons();
@@ -128,20 +135,20 @@
   }
 
   function refreshSaveButtons() {
-    const running = state.running;
+    const locked = state.running || state.stopping;
 
     const userValue = el.userInput.value.trim();
-    const userDirty = !running && userValue !== "" && userValue !== state.cfg.user;
+    const userDirty = !locked && userValue !== "" && userValue !== state.cfg.user;
     el.saveUser.classList.toggle("active", userDirty);
     el.saveUser.disabled = !userDirty;
 
-    const passDirty = !running && el.passInput.value.length > 0;
+    const passDirty = !locked && el.passInput.value.length > 0;
     el.savePass.classList.toggle("active", passDirty);
     el.savePass.disabled = !passDirty;
 
     const freqValue = Number(el.freqInput.value);
     const freqDirty =
-      !running &&
+      !locked &&
       el.freqInput.value !== "" &&
       Number.isFinite(freqValue) &&
       freqValue !== state.cfg.freq;
@@ -226,6 +233,7 @@
     if (reply.config) hydrateConfig(reply.config);
     if (reply.state) {
       state.running = !!reply.state.running;
+      state.stopping = !!reply.state.stopping;
       state.phase = reply.state.phase || "idle";
       state.online = reply.state.online;
       state.failCount = reply.state.failCount || 0;
@@ -247,13 +255,21 @@
         if (data.config) hydrateConfig(data.config);
         if (data.state) {
           const prevRunning = state.running;
+          const prevStopping = state.stopping;
           const prevPhase = state.phase;
           state.running = !!data.state.running;
+          state.stopping = !!data.state.stopping;
           state.phase = data.state.phase || "idle";
           state.online = data.state.online;
           state.failCount = data.state.failCount || 0;
           state.lastCheck = data.state.lastCheck || "";
-          if (prevRunning !== state.running || state.running) renderState();
+          if (
+            prevRunning !== state.running ||
+            prevStopping !== state.stopping ||
+            state.running
+          ) {
+            renderState();
+          }
           if (state.phase === "error" && prevPhase !== "error" && data.state.message) {
             toast(data.state.message);
           }
@@ -280,6 +296,7 @@
     hydrateConfig(data.config);
     if (data.state) {
       state.running = !!data.state.running;
+      state.stopping = !!data.state.stopping;
       state.phase = data.state.phase || "idle";
       state.online = data.state.online;
       state.failCount = data.state.failCount || 0;
@@ -298,10 +315,11 @@
   /* ------------------------------------------------------------ 事件绑定 */
   function bind() {
     el.mainBtn.addEventListener("click", async () => {
+      if (state.stopping) return;
       el.mainBtn.disabled = true;
       const reply = state.running ? await call("stop") : await call("start");
       applyReply(reply);
-      el.mainBtn.disabled = false;
+      el.mainBtn.disabled = !!state.stopping;
     });
 
     el.saveUser.addEventListener("click", async () => {

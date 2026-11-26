@@ -1,2 +1,4 @@
 pywebview==6.2.1
 cryptography==50.0.2
+pystray==0.19.5
+Pillow==11.3.0

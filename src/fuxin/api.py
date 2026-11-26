@@ -69,8 +69,8 @@ class Api:
 
     # ------------------------------------------------------------ 配置
     def save_user(self, value: str) -> dict:
-        if self.monitor.running:
-            return self._reply(False, "正在运行中，禁止更改学号、密码")
+        if self.monitor.running or self.monitor.stopping:
+            return self._reply(False, "正在运行，账号与频率已锁定")
         value = (value or "").strip()
         if not value:
             return self._reply(False, "学号不能为空")
@@ -83,8 +83,8 @@ class Api:
         return self._reply(True, "学号已保存")
 
     def save_pass(self, value: str) -> dict:
-        if self.monitor.running:
-            return self._reply(False, "正在运行中，禁止更改学号、密码")
+        if self.monitor.running or self.monitor.stopping:
+            return self._reply(False, "正在运行，账号与频率已锁定")
         value = value or ""
         if not value:
             return self._reply(False, "密码不能为空")
@@ -97,14 +97,14 @@ class Api:
         return self._reply(True, "密码已保存")
 
     def save_freq(self, value) -> dict:
-        if self.monitor.running:
-            return self._reply(False, "正在运行中，禁止更改检测频率")
+        if self.monitor.running or self.monitor.stopping:
+            return self._reply(False, "正在运行，账号与频率已锁定")
         try:
             freq = int(str(value).strip())
         except (TypeError, ValueError):
-            return self._reply(False, "检测频率须为不小于 1 的整数")
+            return self._reply(False, f"检测频率须为不小于 {paths.MIN_FREQ} 的整数")
         if freq < paths.MIN_FREQ:
-            return self._reply(False, "检测频率须为不小于 1 的整数")
+            return self._reply(False, f"检测频率须为不小于 {paths.MIN_FREQ} 的整数")
         if freq == self.config.freq_value():
             return self._reply(False, "检测频率未发生变化")
         self.config.set_freq(freq)
@@ -119,9 +119,13 @@ class Api:
         return self._reply(ok, message)
 
     def stop(self) -> dict:
-        if not self.monitor.running:
+        state = self.monitor.snapshot()
+        if not state.get("running") and not state.get("stopping"):
             return self._reply(False, "当前未在运行")
         self.monitor.stop(by_user=True)
+        state = self.monitor.snapshot()
+        if state.get("stopping"):
+            return self._reply(True, "正在停止…")
         return self._reply(True, "已停止检测")
 
     # ------------------------------------------------------------ 日志
@@ -190,5 +194,5 @@ class Api:
 
     # ------------------------------------------------------------ 退出
     def shutdown(self) -> dict:
-        self.monitor.stop(by_user=False, reason="软件关闭")
+        self.monitor.stop(by_user=False, reason="软件关闭", wait=True, timeout=2.0)
         return self._reply(True, "bye")

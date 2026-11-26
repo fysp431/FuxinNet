@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import ctypes
 import os
+import platform
 import sys
 import traceback
 
-from . import autostart, paths
+from . import autostart, net, paths
 from .api import Api
 from .config import Config
 from .logger import Logger
@@ -95,8 +96,16 @@ def main() -> int:
     logger = Logger(paths.log_path())
     logger.log(f"========== {paths.APP_NAME} {paths.APP_VERSION} 启动 ==========")
     logger.log(f"程序目录：{paths.app_dir()}")
+    logger.log(
+        f"[环境] Python {platform.python_version()} / {platform.platform()} / "
+        f"frozen={bool(getattr(sys, 'frozen', False))}"
+    )
+    logger.log(f"[环境] 门户={net.portal_host()} 日志={paths.log_path()}")
 
     config = Config(logger)
+    logger.log(
+        f"[环境] 检测频率={config.freq_value()}秒/次 自启作用域={config.autostart_scope}"
+    )
     scope_label = "用户级" if config.autostart_scope == autostart.SCOPE_USER else "系统级"
     logger.log(
         f"开机自启（{scope_label}）："
@@ -139,9 +148,9 @@ def main() -> int:
         if state["quitting"]:
             return
         state["quitting"] = True
-        if monitor.running:
-            monitor.stop(by_user=False, reason="托盘退出")
-            logger.log("托盘退出：已停止检测")
+        if monitor.running or monitor.stopping:
+            monitor.stop(by_user=False, reason="托盘退出", wait=True, timeout=3.0)
+            logger.log("托盘退出：已请求停止检测")
         logger.log("用户通过托盘菜单退出软件")
         tray.stop()
         try:
@@ -171,8 +180,8 @@ def main() -> int:
             return
         state["quitting"] = True
         try:
-            if monitor.running:
-                monitor.stop(by_user=False, reason="软件关闭")
+            if monitor.running or monitor.stopping:
+                monitor.stop(by_user=False, reason="软件关闭", wait=True, timeout=2.0)
             logger.log("软件关闭（窗口退出）")
         except Exception:
             logger.log("关闭时发生异常：" + traceback.format_exc(limit=3))

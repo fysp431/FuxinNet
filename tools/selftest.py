@@ -69,7 +69,11 @@ def test_rsa() -> None:
     check("还原出原文", block[separator + 1:].decode() == plaintext)
 
     too_long = "x" * 200
-    check("超长回退明文", auth.rsa_encrypt(exp_hex, mod_hex, too_long) == too_long)
+    try:
+        auth.rsa_encrypt(exp_hex, mod_hex, too_long)
+        check("超长密码拒绝加密（不回退明文）", False, "仍然返回了明文")
+    except ValueError:
+        check("超长密码拒绝加密（不回退明文）", True)
 
 
 # --------------------------------------------------- 2. unicode 转义解码
@@ -173,7 +177,7 @@ def test_auth_flow() -> bool:
 
     online = {"value": False}
     original_check = net.check_online
-    net.check_online = lambda: online["value"]
+    net.check_online = lambda *args, **kwargs: online["value"]
     try:
         logger = _Logger()
         stop = threading.Event()

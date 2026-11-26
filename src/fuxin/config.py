@@ -92,8 +92,10 @@ class Config:
                 elif key == "freq":
                     number = int(value.strip())
                     if number < paths.MIN_FREQ:
-                        number = paths.DEFAULT_FREQ
-                        self._logger.log("检测频率数据损坏，已回落到默认 600 秒/次")
+                        number = paths.MIN_FREQ
+                        self._logger.log(
+                            f"检测频率低于下限，已调整为 {paths.MIN_FREQ} 秒/次"
+                        )
                     self.freq = number
             except Exception as exc:  # 单行损坏不影响其它字段
                 self.load_error = f"配置项 {key} 解析失败：{exc}"
