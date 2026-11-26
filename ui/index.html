@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>福信校网通</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <header class="hero">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#5b8cff"/>
+              <stop offset="100%" stop-color="#2f6fed"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="44" height="44" rx="14" fill="url(#lg)"/>
+          <path d="M14 27a10 10 0 0 1 20 0" fill="none" stroke="#fff" stroke-width="2.6"
+                stroke-linecap="round" opacity=".95"/>
+          <path d="M19 31a5 5 0 0 1 10 0" fill="none" stroke="#fff" stroke-width="2.6"
+                stroke-linecap="round" opacity=".8"/>
+          <circle cx="24" cy="35.5" r="2.1" fill="#fff"/>
+        </svg>
+      </div>
+      <div class="titles">
+        <h1>福信校网通</h1>
+        <p id="subtitle">校园网自动认证助手</p>
+      </div>
+    </div>
+    <div class="pill idle" id="pill">
+      <span class="dot"></span>
+      <span id="pillText">未运行</span>
+    </div>
+  </header>
+
+  <button id="mainBtn" class="main-btn idle" type="button">
+    <span id="mainBtnText">启 动</span>
+  </button>
+
+  <section class="stats">
+    <div class="stat">
+      <label>网络状态</label>
+      <b id="netState">—</b>
+    </div>
+    <div class="stat">
+      <label>上次检测</label>
+      <b id="lastCheck">—</b>
+    </div>
+    <div class="stat">
+      <label>失败次数</label>
+      <b id="failCount">0</b>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>账号设置</h2>
+      <span class="badge" id="lockBadge" hidden>运行中已锁定</span>
+    </div>
+
+    <div class="row">
+      <label for="userInput">学号</label>
+      <div class="field">
+        <input id="userInput" type="text" autocomplete="off" spellcheck="false" placeholder="请输入学号" />
+      </div>
+      <button class="mini" id="saveUser" type="button">保存</button>
+    </div>
+
+    <div class="row">
+      <label for="passInput">密码</label>
+      <div class="field">
+        <input id="passInput" type="password" autocomplete="off" spellcheck="false" placeholder="请输入密码" />
+        <button class="eye" id="eyeBtn" type="button" title="显示/隐藏密码">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"
+                  fill="none" stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+        </button>
+      </div>
+      <button class="mini" id="savePass" type="button">保存</button>
+    </div>
+
+    <div class="row">
+      <label for="freqInput">检测频率</label>
+      <div class="field">
+        <input id="freqInput" type="number" min="1" step="1" />
+        <span class="unit">秒/次</span>
+      </div>
+      <button class="mini" id="saveFreq" type="button">保存</button>
+    </div>
+
+    <div class="row">
+      <label>开机自启</label>
+      <div class="field field-switch">
+        <span class="desc">开启后自动驻留托盘，后台守护</span>
+        <select id="autoScope" class="scope-select" aria-label="自启作用域">
+          <option value="user">用户级</option>
+          <option value="system">系统级（开发中）</option>
+        </select>
+        <button class="switch" id="autoStart" type="button" role="switch" aria-checked="false">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <span class="mini spacer" aria-hidden="true"></span>
+    </div>
+
+    <p class="hint" id="hint">提示：运行中不可修改；改动后点击对应「保存」才会生效。</p>
+  </section>
+
+  <section class="card log-card">
+    <div class="card-head">
+      <h2>运行日志</h2>
+      <div class="tools">
+        <button class="ghost" id="exportBtn" type="button">导出日志</button>
+        <button class="ghost" id="openDirBtn" type="button">打开目录</button>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+  </section>
+
+  <footer class="footer">
+    <span>福信校网通</span>
+    <span class="sep">·</span>
+    <span>开发者 fysp431</span>
+    <span class="sep">·</span>
+    <span>2872058826@qq.com</span>
+    <span class="sep">·</span>
+    <span id="ver">v2.0.0</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# 虚拟环境
+.venv/
+venv/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+pip-ephem-wheel-cache-*/
+
+# PyInstaller 产物
+build/
+dist/
+*.manifest
+
+# 运行期产物（配置/日志不入库）
+fuxin_config.dat
+fuxin_log.txt
+fuxin_log_*.txt
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+nohup.out
+
+# WebView2 运行期缓存
+webview_data/

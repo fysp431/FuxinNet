@@ -1,14 +1,15 @@
 # 福信校网通 · FJPIT 校园网自动认证助手
 
-> 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院平潭校区（FJPIT）** 校园网 ePortal 认证打造。
+> 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院（FJPIT）** 校园网 ePortal 认证打造。
 
 <p>
   <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2f6fed">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4">
   <img alt="python" src="https://img.shields.io/badge/python-3.11-3776ab">
+  <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">
 </p>
 
-![界面截图](screenshot.png)
+![界面截图](docs/screenshot.png)
 
 ---
 
@@ -17,6 +18,8 @@
 连上校园 WiFi 后，认证过期往往不会有任何提示——浏览器打不开、游戏掉线，得手动打开网关页面重新登录。
 这个小工具会在后台按你设定的频率探测网络，一旦发现"连着 WiFi 但没认证"，就自动完成 ePortal 网页认证，
 网络恢复后继续静默守护。
+
+界面用 **Python + pywebview** 重写（原生 WebView2 渲染），托盘常驻，仅 ~21 MB 单文件、免安装。
 
 ## 功能特性
 
@@ -36,6 +39,13 @@
 - 只在状态变化时写日志，不会刷屏
 - 检测频率运行中修改即时生效
 
+**界面**
+
+- 卡片式现代 UI：状态徽标、在线/离线、上次检测、失败计数一屏可见
+- 运行中锁定账号与频率，防止误改
+- 保存按钮两态（有改动才可点）、密码显隐
+- 日志实时滚动，支持导出与打开所在目录
+
 **托盘与自启**
 
 - 点 × 隐藏到托盘继续跑；左键恢复窗口；右键「打开主界面 / 退出」
@@ -51,8 +61,8 @@
 
 ## 下载与安装
 
-1. 到 [Releases](https://github.com/fysp431/FuxinNet/releases/) 下载 `福信校网通_v2.0.0.exe`
-2. **建议放到独立文件夹**，不要直接在桌面双击运行
+1. 到 **Releases** 下载 `福信校网通_v2.0.0.exe`（或自行编译，见下文）
+2. **建议先解压/放到独立文件夹**，不要直接在压缩包里双击运行
 3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」
    （程序没有购买代码签名证书，属正常现象）
 4. 需要 **WebView2 运行时**：Win11 与较新的 Win10 自带 Edge 即可；若提示无法初始化界面内核，
@@ -81,6 +91,27 @@
 | 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志） |
 | 日志 | exe 同目录 `fuxin_log.txt`，也可在界面「导出日志」 |
 
+## 工作原理（够用版）
+
+```
+探测在线？ ──是──> 安静等待下一轮
+    │
+    否
+    ↓
+跟随跳转链（≤6 跳）拿到 index.jsp?wlanuserip=…&mac=…    ← 参数原样回传，不解码再编码
+    ↓
+GET  /eportal/InterFace.do?method=pageInfo&indexParams=…  ← 取 passwordEncrypt / 公钥
+    ↓
+RSA PKCS#1 v1.5 填充 + 裸模幂 → 十进制字符串                ← 网关要求时才加密
+    ↓
+POST /eportal/InterFace.do?method=login
+     userId / password / service="" / passwordEncrypt / queryString
+    ↓
+解析 {"result":"success"} 或 {"result":"fail","message":"…"}（含 \uXXXX 解码）
+    ↓
+每 5 秒复检，最多 60 秒；成功即恢复守护
+```
+
 失败分类处理：**凭据错误**立即停止；**网络类失败** 30 秒后重试，连续 3 次停止。
 
 ## 常见问题
@@ -89,7 +120,7 @@
 <summary><b>双击没反应 / 白屏</b></summary>
 
 多半被杀毒软件拦截，或 SmartScreen 提示没点「仍要运行」。
-白屏通常是 WebView2 未能渲染页面：把 exe 放到不含特殊字符的普通目录（`D:\某个新文件夹`）再试，
+白屏通常是 WebView2 未能渲染页面：把 exe 放到不含特殊字符的普通目录（桌面、`D:\某个新文件夹`）再试，
 并把 `fuxin_log.txt` 一并反馈。
 </details>
 
@@ -125,6 +156,76 @@
 | `认证服务器可达但未获取到认证参数` | 可能网络已经恢复 | 通常可忽略 |
 </details>
 
+## 技术栈
+
+| 层 | 选型 |
+|---|---|
+| UI | HTML + CSS + 原生 JS（WebView2 渲染） |
+| 壳 | pywebview 6 + WinForms |
+| 后端 | Python 3.11（`http.client` 直连，无第三方 HTTP 依赖） |
+| 加密 | cryptography（AES-GCM） |
+| 托盘 | pystray + Pillow |
+| 打包 | PyInstaller（单文件） |
+
+## 目录结构
+
+```
+.
+├─ run.py                 # 入口（写 .NET app.config → 起界面）
+├─ fuxin.spec             # 单文件打包
+├─ fuxin_portable.spec    # 免解压目录版打包
+├─ requirements.txt
+├─ assets/                # 图标
+├─ docs/                  # 截图
+├─ ui/                    # 前端：index.html / style.css / app.js
+├─ src/fuxin/
+│  ├─ main.py             # DPI、单实例、托盘接线、窗口
+│  ├─ paths.py            # 路径与常量（以 exe 目录为准）
+│  ├─ logger.py           # 日志：文件 + 内存 + 脱敏
+│  ├─ config.py           # 配置：AES-GCM 读写
+│  ├─ net.py              # 直连 HTTP、探测、跳转链
+│  ├─ auth.py             # pageInfo / RSA / login / 完整认证
+│  ├─ worker.py           # 监控线程与重试状态机
+│  ├─ tray.py             # 系统托盘
+│  ├─ autostart.py        # 开机自启（用户级 / 系统级预留）
+│  └─ api.py              # 前端桥（轮询 + 保存 + 启停 + 日志）
+└─ tools/selftest.py      # 核心自测（RSA / 转义 / mock 网关 / 配置）
+```
+
+## 本地开发
+
+> **必须用 Python 3.11**：pythonnet 3.2+ 只提供 netstandard2.1 程序集，.NET Framework 4.8 加载不了；
+> 3.11 + pythonnet 3.0.5 才能走系统自带 .NET Framework，打包后的 exe 也才能"开箱即用"。
+
+```bat
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install pythonnet==3.0.5 pyinstaller
+.venv\Scripts\python run.py
+```
+
+核心逻辑自测（不需要校园网，会在本地起一个 mock ePortal）：
+
+```bat
+.venv\Scripts\python tools\selftest.py
+```
+
+## 打包
+
+```bat
+python -m PyInstaller --noconfirm --clean fuxin.spec
+```
+
+产物：`dist\福信校网通.exe`（单文件）。
+
+已经在 spec/代码里处理掉的三个坑（改配置时别删）：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `Could not create temporary directory!` | 某些目录/策略下无法用 `%TEMP%` 解包 | spec 里 `runtime_tmpdir="."`，改在 exe 旁解包（退出自动清理） |
+| `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集" | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
+| 窗口白屏 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录 |
+
 ## 运行期文件
 
 | 文件 | 说明 |
@@ -144,8 +245,4 @@
 
 **fysp431** · 邮箱 2872058826@qq.com
 
-如果这个小工具帮到了你，点个 star 就好。
-
-## 许可证
-
-MIT
+如果这个小工具帮到了你，点个 ⭐ 就好。
