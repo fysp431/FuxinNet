@@ -1,12 +1,12 @@
 # 福信校网通 · FJPIT 校园网自动认证助手
 
-> 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院（FJPIT）** 校园网 ePortal 认证打造。
+> 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院平潭校区（FJPIT）** 校园网 ePortal 认证打造。
 
-<p>
-  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2f6fed">
-  <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4">
-  <img alt="python" src="https://img.shields.io/badge/python-3.11-3776ab">
-  <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">
+<p>  
+  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2f6fed">  
+  <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4">  
+  <img alt="python" src="https://img.shields.io/badge/python-3.11-3776ab">  
+  <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">  
 </p>
 
 ![界面截图](docs/screenshot.png)
@@ -15,8 +15,8 @@
 
 ## 这是什么
 
-连上校园 WiFi 后，认证过期往往不会有任何提示——浏览器打不开、游戏掉线，得手动打开网关页面重新登录。
-这个小工具会在后台按你设定的频率探测网络，一旦发现"连着 WiFi 但没认证"，就自动完成 ePortal 网页认证，
+连上校园 WiFi 后，认证过期往往不会有任何提示——浏览器打不开、游戏掉线，得手动打开网关页面重新登录。  
+这个小工具会在后台按你设定的频率探测网络，一旦发现"连着 WiFi 但没认证"，就自动完成 ePortal 网页认证，  
 网络恢复后继续静默守护。
 
 界面用 **Python + pywebview** 重写（原生 WebView2 渲染），托盘常驻，仅 ~21 MB 单文件、免安装。
@@ -55,17 +55,20 @@
 
 **安全**
 
+|   |   |
+| - | - |
+
 - 学号密码用 `AES-GCM` 加密后存本地（`SHA256("fuxin-xiaowangtong|" + salt)` 派生密钥），不联网上传
 - 日志自动脱敏：`mac=` `wlanuserip=` `snmpagentip=` `nasportid=` 只保留前 4 位
 - 单实例：重复双击只会把已有窗口叫出来
 
 ## 下载与安装
 
-1. 到 **Releases** 下载 `福信校网通_v2.0.0.exe`（或自行编译，见下文）
-2. **建议先解压/放到独立文件夹**，不要直接在压缩包里双击运行
-3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」
+1. 到 [Releases](https://github.com/fysp431/FuxinNet/releases/latest) 下载 `福信校网通_v2.0.0.exe`（或自行编译，见下文）
+2. **建议放到独立文件夹**，不要直接在压缩包里双击运行
+3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」  
    （程序没有购买代码签名证书，属正常现象）
-4. 需要 **WebView2 运行时**：Win11 与较新的 Win10 自带 Edge 即可；若提示无法初始化界面内核，
+4. 需要 **WebView2 运行时**：Win11 与较新的 Win10 自带 Edge 即可；若提示无法初始化界面内核，  
    安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 后重试
 
 > 首次运行会在 exe 同目录生成 `fuxin_log.txt`、`fuxin_config.dat`、`webview_data\`，属正常产物。
@@ -78,18 +81,18 @@
 
 运行后按钮变红「停 止」，账号信息锁定。要改设置先点停止。
 
-**断网验证**：连上校园网但处于"需要登录"状态 → 点启动 → 日志应依次出现
+**断网验证**：连上校园网但处于"需要登录"状态 → 点启动 → 日志应依次出现  
 `检测到断网，开始认证` → `已获取认证跳转URL` → `已获取认证参数` → `认证成功，网络已恢复`。
 
 ## 使用说明
 
-| 项 | 说明 |
-|---|---|
+| 项    | 说明                                    |
+| ---- | ------------------------------------- |
 | 检测频率 | 单位 **秒/次**，最小 1、必须整数、**不设上限**；保存后立即生效 |
-| 开机自启 | 作用域选「用户级」后打开开关；选「系统级（开发中）」时开关置灰 |
-| 关闭窗口 | 隐藏到托盘，后台继续运行 |
-| 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志） |
-| 日志 | exe 同目录 `fuxin_log.txt`，也可在界面「导出日志」 |
+| 开机自启 | 作用域选「用户级」后打开开关；选「系统级（开发中）」时开关置灰       |
+| 关闭窗口 | 隐藏到托盘，后台继续运行                          |
+| 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志）                |
+| 日志   | exe 同目录 `fuxin_log.txt`，也可在界面「导出日志」   |
 
 ## 工作原理（够用版）
 
@@ -117,55 +120,65 @@ POST /eportal/InterFace.do?method=login
 ## 常见问题
 
 <details>
+
 <summary><b>双击没反应 / 白屏</b></summary>
 
-多半被杀毒软件拦截，或 SmartScreen 提示没点「仍要运行」。
-白屏通常是 WebView2 未能渲染页面：把 exe 放到不含特殊字符的普通目录（桌面、`D:\某个新文件夹`）再试，
+多半被杀毒软件拦截，或 SmartScreen 提示没点「仍要运行」。  
+白屏通常是 WebView2 未能渲染页面：把 exe 放到不含特殊字符的普通目录（`D:\某个新文件夹`）再试，  
 并把 `fuxin_log.txt` 一并反馈。
+
 </details>
 
 <details>
+
 <summary><b>点了 × 程序是不是退出了？</b></summary>
 
 没有，隐藏到托盘了（可能被折叠进任务栏「^」溢出区）。左键点托盘图标即可恢复。
+
 </details>
 
 <details>
+
 <summary><b>开机自启没生效</b></summary>
 
-① 确认作用域是「用户级」且开关是绿色；② 任务管理器 →「启动」看「福信校网通」是否被禁用；
+① 确认作用域是「用户级」且开关是绿色；② 任务管理器 →「启动」看「福信校网通」是否被禁用；  
 ③ 换过 exe 位置的话，把开关关一次再开一次，让注册表值指向新路径。
+
 </details>
 
 <details>
+
 <summary><b>提示"已在运行中"</b></summary>
 
 托盘里已有一个实例，它会自动把窗口叫出来——不需要也不允许再开第二个。
+
 </details>
 
 <details>
+
 <summary><b>认证一直失败怎么排查</b></summary>
 
 看日志最后几行：
 
-| 日志 | 含义 | 处理 |
-|---|---|---|
-| `用户不存在` / `密码不匹配` | 凭据错误，程序已自动停止 | 核对学号密码 |
-| `无法连接认证服务器` | 不在校园网 / 未连 WiFi | 检查网络 |
-| `认证已提交，但等待 60 秒后网络仍未连通` | 网关收下了但没放行 | 重试一次，或手动开浏览器对比 |
-| `认证服务器可达但未获取到认证参数` | 可能网络已经恢复 | 通常可忽略 |
+| 日志                      | 含义              | 处理             |
+| ----------------------- | --------------- | -------------- |
+| `用户不存在` / `密码不匹配`       | 凭据错误，程序已自动停止    | 核对学号密码         |
+| `无法连接认证服务器`             | 不在校园网 / 未连 WiFi | 检查网络           |
+| `认证已提交，但等待 60 秒后网络仍未连通` | 网关收下了但没放行       | 重试一次，或手动开浏览器对比 |
+| `认证服务器可达但未获取到认证参数`      | 可能网络已经恢复        | 通常可忽略          |
+
 </details>
 
 ## 技术栈
 
-| 层 | 选型 |
-|---|---|
-| UI | HTML + CSS + 原生 JS（WebView2 渲染） |
-| 壳 | pywebview 6 + WinForms |
+| 层  | 选型                                         |
+| -- | ------------------------------------------ |
+| UI | HTML + CSS + 原生 JS（WebView2 渲染）            |
+| 壳  | pywebview 6 + WinForms                     |
 | 后端 | Python 3.11（`http.client` 直连，无第三方 HTTP 依赖） |
-| 加密 | cryptography（AES-GCM） |
-| 托盘 | pystray + Pillow |
-| 打包 | PyInstaller（单文件） |
+| 加密 | cryptography（AES-GCM）                      |
+| 托盘 | pystray + Pillow                           |
+| 打包 | PyInstaller（单文件）                           |
 
 ## 目录结构
 
@@ -194,7 +207,7 @@ POST /eportal/InterFace.do?method=login
 
 ## 本地开发
 
-> **必须用 Python 3.11**：pythonnet 3.2+ 只提供 netstandard2.1 程序集，.NET Framework 4.8 加载不了；
+> **必须用 Python 3.11**：pythonnet 3.2+ 只提供 netstandard2.1 程序集，.NET Framework 4.8 加载不了；  
 > 3.11 + pythonnet 3.0.5 才能走系统自带 .NET Framework，打包后的 exe 也才能"开箱即用"。
 
 ```bat
@@ -220,20 +233,20 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 
 已经在 spec/代码里处理掉的三个坑（改配置时别删）：
 
-| 现象 | 原因 | 处理 |
-|---|---|---|
-| `Could not create temporary directory!` | 某些目录/策略下无法用 `%TEMP%` 解包 | spec 里 `runtime_tmpdir="."`，改在 exe 旁解包（退出自动清理） |
-| `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集" | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
-| 窗口白屏 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录 |
+| 现象                                                   | 原因                                 | 处理                                                        |
+| ---------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| `Could not create temporary directory!`              | 某些目录/策略下无法用 `%TEMP%` 解包            | spec 里 `runtime_tmpdir="."`，改在 exe 旁解包（退出自动清理）            |
+| `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集"        | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
+| 窗口白屏                                                 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录   |
 
 ## 运行期文件
 
-| 文件 | 说明 |
-|---|---|
-| `fuxin_config.dat` | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 |
-| `fuxin_log.txt` | 运行日志（UTF-8 / CRLF / `[时间] 内容`） |
-| `fuxin_log_export_*.txt` | 「导出日志」的副本 |
-| `webview_data\` | WebView2 缓存，可删 |
+| 文件                       | 说明                              |
+| ------------------------ | ------------------------------- |
+| `fuxin_config.dat`       | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 |
+| `fuxin_log.txt`          | 运行日志（UTF-8 / CRLF / `[时间] 内容`）  |
+| `fuxin_log_export_*.txt` | 「导出日志」的副本                       |
+| `webview_data\`          | WebView2 缓存，可删                  |
 
 ## 免责声明
 
@@ -241,8 +254,12 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 - 仅在你**本人已获得授权**的账号与网络环境下使用；请遵守学校网络使用规定
 - 凭据只保存在本机（加密），不会上传；但因使用本工具产生的任何后果由使用者自行承担
 
+## 许可证
+
+MIT
+
 ## 作者
 
-**fysp431** · 邮箱 2872058826@qq.com
+**fysp431** · 邮箱 <2872058826@qq.com>
 
 如果这个小工具帮到了你，点个 ⭐ 就好。
