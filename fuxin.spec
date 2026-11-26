@@ -3,9 +3,31 @@
 
 构建（必须用 Python 3.11 + pythonnet 3.0.5 的环境）：
     python -m PyInstaller --noconfirm --clean fuxin.spec
+
+产物名形如 FuxinNet_v2.0.1-alpha1.exe：版本号自动从 src/fuxin/paths.py 的
+APP_VERSION 读取，发版时只需改 paths.py 一处，无需再同步本文件。
 """
 
+import os
+import re
+
 from PyInstaller.utils.hooks import collect_all
+
+
+def _read_version() -> str:
+    """从 paths.py 读 APP_VERSION；读不到时回落到不带版本号的名字。"""
+    base = globals().get("SPECPATH") or os.getcwd()
+    target = os.path.join(base, "src", "fuxin", "paths.py")
+    try:
+        with open(target, "r", encoding="utf-8") as fh:
+            match = re.search(r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']', fh.read(), re.M)
+        return match.group(1) if match else ""
+    except OSError:
+        return ""
+
+
+_VERSION = _read_version()
+EXE_NAME = f"FuxinNet_{_VERSION}" if _VERSION else "FuxinNet"
 
 datas = [
     ("ui", "ui"),
@@ -51,7 +73,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="福信校网通",
+    name=EXE_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

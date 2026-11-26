@@ -287,7 +287,7 @@
     const data = await call("bootstrap");
     if (!data) return;
     state.ready = true;
-    el.ver.textContent = data.version || "v2.0.0";
+    el.ver.textContent = data.version || "v2.0.1-alpha1";
     state.autostart = !!data.autostart;
     state.autostartScope = data.autostartScope === "system" ? "system" : "user";
     state.autostartSystemSupported = !!data.autostartSystemSupported;

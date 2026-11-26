@@ -3,7 +3,7 @@
 > 断网自动重连，告别手动点「登录」。一个常驻托盘的小工具，专为 **福建信息职业技术学院平潭校区（FJPIT）** 校园网 ePortal 认证打造。
 
 <p>  
-  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2f6fed">  
+  <img alt="version" src="https://img.shields.io/badge/version-v2.0.1--alpha1-2f6fed">  
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4">  
   <img alt="python" src="https://img.shields.io/badge/python-3.11-3776ab">  
   <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">  
@@ -62,7 +62,7 @@
 
 ## 下载与安装
 
-1. 到 [Releases](https://github.com/fysp431/FuxinNet/releases/latest) 下载 `福信校网通_v2.0.0.exe`（或自行编译，见下文）
+1. 到 [Releases](https://github.com/fysp431/FuxinNet/releases/latest) 下载 `FuxinNet_v2.0.1.exe`（或自行编译，见下文）
 2. **建议放到独立文件夹**，不要直接在压缩包里双击运行
 3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」  
    （程序没有购买代码签名证书，属正常现象）
@@ -235,7 +235,10 @@ P0 回归（脱敏 / URL / 登录解析 / RSA / 线程生命周期 / api.stop / 
 python -m PyInstaller --noconfirm --clean fuxin.spec
 ```
 
-产物：`dist\福信校网通.exe`（单文件）。
+产物：`dist\FuxinNet_v2.0.1-alpha1.exe`（单文件）。
+
+产物名中的版本号由 `src/fuxin/paths.py` 的 `APP_VERSION` 自动生成，发版时只改该常量即可，无需再动 spec。
+
 
 已经在 spec/代码里处理掉的三个坑（改配置时别删）：
 
