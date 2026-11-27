@@ -27,9 +27,12 @@ PHASE_CHECKING = "checking"
 PHASE_AUTHING = "authenticating"
 PHASE_RUNNING = "running"
 PHASE_ERROR = "error"
+PHASE_WAITING = "waiting"
 
 RETRY_GAP = 30
 MAX_FAIL = 3
+WAIT_NET_READY_MAX = 180
+WAIT_NET_READY_GAP = 5
 
 
 def _now_text() -> str:
@@ -146,6 +149,11 @@ class Monitor:
             f"========== 启动监控 run={run_id} 频率={interval}秒/次 门户={net.portal_host()} =========="
         )
         thread.start()
+        try:
+            self.config.set_auto_run(True)
+            self.config.save()
+        except Exception as exc:
+            self.logger.log(f"记录自动运行意图失败：{exc}")
         self._emit_state()
         return True, ""
 
@@ -179,6 +187,12 @@ class Monitor:
         if not already:
             label = "用户手动停止" if by_user else (reason or "停止监控")
             self.logger.log(f"[运行] {label} run={run_id}")
+            if by_user:
+                try:
+                    self.config.set_auto_run(False)
+                    self.config.save()
+                except Exception as exc:
+                    self.logger.log(f"清除自动运行意图失败：{exc}")
         self._emit_state()
 
         # 工作线程内部请求停止（如账号错误）：不做等待
@@ -227,6 +241,8 @@ class Monitor:
         self, run_id: int, stop: threading.Event, user: str, password: str
     ) -> None:
         last_online: Optional[bool] = None
+        if not self._wait_network_ready(run_id, stop):
+            return
         interval = max(paths.MIN_FREQ, self.config.freq_value())
         check_no = 0
         while self._alive(run_id, stop):
@@ -352,6 +368,50 @@ class Monitor:
             )
             self.logger.log(f"[认证] 认证成功，网络已恢复 用时={cost}ms")
             return
+
+    def _wait_network_ready(self, run_id: int, stop: threading.Event) -> bool:
+        """等待门户可达；期间不计入认证失败次数。
+
+        返回 True 表示可以继续检测循环，False 表示已被停止。
+        超时不算失败，照常继续（门户地址可能变化）。
+        """
+        host = net.portal_host()
+        self._update(
+            run_id,
+            phase=PHASE_WAITING,
+            last_message=f"等待网络就绪（门户 {host}）",
+        )
+        started = time.monotonic()
+        deadline = started + WAIT_NET_READY_MAX
+        last_note = 0.0
+        while self._alive(run_id, stop):
+            try:
+                resp = net.http_request(f"http://{host}/", timeout=3.0)
+                ready = not resp.error
+            except Exception:
+                ready = False
+            if ready:
+                self.logger.log(
+                    f"网络已就绪，开始检测（等待 {int(time.monotonic() - started)}s）"
+                )
+                return True
+            now = time.monotonic()
+            if now - last_note >= 15:
+                last_note = now
+                self.logger.log(
+                    f"[数据] 等待网络就绪 已等待 {int(now - started)}s"
+                    f"/{WAIT_NET_READY_MAX}s 门户={host} 暂不可达"
+                )
+            remain = deadline - now
+            if remain <= 0:
+                self.logger.log(
+                    f"等待网络就绪超时（{WAIT_NET_READY_MAX}s），"
+                    "继续进入检测循环"
+                )
+                return True
+            if stop.wait(min(WAIT_NET_READY_GAP, remain)):
+                return False
+        return False
 
     def _tick_wait(self, run_id: int, stop: threading.Event, interval: int) -> int:
         """按当前频率等待；期间频率被改动则立即生效。"""

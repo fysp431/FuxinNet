@@ -206,6 +206,18 @@ def main() -> int:
             else:
                 _foreground_window_by_title(paths.APP_NAME)
 
+        # 自动运行：记住上次退出时的状态（与是否开机自启无关）
+        if not config.auto_run_value():
+            return
+        if not config.has_credentials():
+            logger.log("上次退出时处于运行状态，但未保存账号或密码，未自动启动")
+            return
+        ok, message = monitor.start()
+        if ok:
+            logger.log("上次退出时处于运行状态，已自动开始检测")
+        else:
+            logger.log(f"自动开始检测失败：{message}")
+
     # 托盘必须等窗口创建完成后再起（回调里要操作窗口）
     window.events.loaded += start_services
 

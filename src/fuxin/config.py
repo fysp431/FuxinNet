@@ -5,6 +5,7 @@
     user=<base64(AES-GCM 密文)>
     pass=<base64(AES-GCM 密文)>
     freq=600
+    auto_run=1
 
 密钥 = SHA256("fuxin-xiaowangtong|" + salt)，user/pass 使用不同 salt；
 AES-GCM，12 字节随机 nonce 拼在密文前面，整体 Base64。
@@ -59,6 +60,7 @@ class Config:
         self.password = ""
         self.freq = paths.DEFAULT_FREQ
         self.autostart_scope = "user"
+        self.auto_run = False
         self.load_error = ""
         self.load()
 
@@ -89,6 +91,8 @@ class Config:
                 elif key == "autostart_scope":
                     scope = value.strip().lower()
                     self.autostart_scope = scope if scope in ("user", "system") else "user"
+                elif key == "auto_run":
+                    self.auto_run = value.strip() == "1"
                 elif key == "freq":
                     number = int(value.strip())
                     if number < paths.MIN_FREQ:
@@ -110,6 +114,7 @@ class Config:
                 lines.append("pass=" + encrypt_text(self.password, _SALT_PASS))
             lines.append(f"freq={self.freq}")
             lines.append(f"autostart_scope={self.autostart_scope}")
+            lines.append(f"auto_run={1 if self.auto_run else 0}")
             payload = "\n".join(lines) + "\n"
             target = paths.config_path()
             tmp = target + ".tmp"
@@ -145,3 +150,11 @@ class Config:
     def freq_value(self) -> int:
         with self._lock:
             return self.freq
+
+    def set_auto_run(self, value: bool) -> None:
+        with self._lock:
+            self.auto_run = bool(value)
+
+    def auto_run_value(self) -> bool:
+        with self._lock:
+            return bool(self.auto_run)

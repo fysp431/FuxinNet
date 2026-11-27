@@ -73,6 +73,9 @@
     if (stopping) {
       el.pill.classList.add("working");
       el.pillText.textContent = "正在停止";
+    } else if (running && state.phase === "waiting") {
+      el.pill.classList.add("working");
+      el.pillText.textContent = "等待网络";
     } else if (authenticating) {
       el.pill.classList.add("working");
       el.pillText.textContent = "正在认证";

@@ -252,7 +252,7 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 
 | 文件                       | 说明                              |
 | ------------------------ | ------------------------------- |
-| `fuxin_config.dat`       | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 |
+| `fuxin_config.dat`       | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 + `auto_run`（上次退出时监控是否在运行） |
 | `fuxin_log.txt`          | 运行日志（UTF-8 / CRLF / `[时间] 内容`），超 2 MB 自动轮转为 `.1`~`.3` |
 | `fuxin_log_export_*.txt` | 「导出日志」的副本                       |
 | `webview_data\`          | WebView2 缓存，可删                  |
