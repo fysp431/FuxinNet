@@ -9,6 +9,7 @@ import ctypes
 import os
 import platform
 import sys
+import time
 import traceback
 
 from . import autostart, net, paths
@@ -102,6 +103,30 @@ def main() -> int:
     )
     logger.log(f"[环境] 门户={net.portal_host()} 日志={paths.log_path()}")
 
+    # 异常关闭检测：上次若未正常退出，标记文件会残留
+    marker = paths.running_marker_path()
+    if os.path.exists(marker):
+        try:
+            with open(marker, "r", encoding="utf-8", errors="replace") as fh:
+                detail = fh.read().strip()
+        except OSError:
+            detail = ""
+        logger.log(
+            "上次运行未正常结束：疑似异常关闭（崩溃 / 断电 / 进程被强制结束）"
+            + (f"｜上次启动信息：{detail}" if detail else "")
+        )
+        try:
+            os.remove(marker)
+        except OSError as exc:
+            logger.log(f"清理运行标记失败：{exc}")
+    try:
+        with open(marker, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(
+                f"start={time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}\n"
+            )
+    except OSError as exc:
+        logger.log(f"写入运行标记失败：{exc}")
+
     config = Config(logger)
     logger.log(
         f"[环境] 检测频率={config.freq_value()}秒/次 自启作用域={config.autostart_scope}"
@@ -133,7 +158,13 @@ def main() -> int:
         hidden=start_minimized,
     )
 
-    state = {"quitting": False}
+    state = {"quitting": False, "close_logged": False}
+
+    def _clear_marker() -> None:
+        try:
+            os.remove(paths.running_marker_path())
+        except OSError:
+            pass
 
     def show_window() -> None:
         try:
@@ -151,7 +182,9 @@ def main() -> int:
         if monitor.running or monitor.stopping:
             monitor.stop(by_user=False, reason="托盘退出", wait=True, timeout=3.0)
             logger.log("托盘退出：已请求停止检测")
-        logger.log("用户通过托盘菜单退出软件")
+        logger.log("软件关闭：用户手动退出（托盘菜单）")
+        state["close_logged"] = True
+        _clear_marker()
         tray.stop()
         try:
             window.destroy()
@@ -161,20 +194,6 @@ def main() -> int:
     tray = Tray(logger, on_show=show_window, on_quit=quit_app)
     api.tray = tray
 
-    def on_closing() -> bool:
-        """返回 False 阻止关闭：关窗口 = 隐藏到托盘（真正退出走托盘菜单）。"""
-        if state["quitting"]:
-            return True
-        if not tray.available:
-            return True  # 托盘没起来就老老实实退出，避免"窗口没了也退不掉"
-        try:
-            window.hide()
-            logger.log("窗口已隐藏到托盘（后台继续运行）")
-        except Exception as exc:
-            logger.log(f"隐藏窗口失败：{exc}")
-            return True
-        return False
-
     def on_closed() -> None:
         if state["quitting"]:
             return
@@ -182,21 +201,103 @@ def main() -> int:
         try:
             if monitor.running or monitor.stopping:
                 monitor.stop(by_user=False, reason="软件关闭", wait=True, timeout=2.0)
-            logger.log("软件关闭（窗口退出）")
+            if not state["close_logged"]:
+                # 兜底：FormClosing 钩子未覆盖到的路径
+                logger.log("软件关闭：用户手动退出（关闭窗口）")
+                state["close_logged"] = True
         except Exception:
             logger.log("关闭时发生异常：" + traceback.format_exc(limit=3))
+        _clear_marker()
         try:
             tray.stop()
         except Exception:
             pass
 
-    window.events.closing += on_closing
     window.events.closed += on_closed
 
     # 监控状态变化 → 托盘 tip
     monitor.on_state = lambda snapshot: tray.set_running(bool(snapshot.get("running")))
 
+    def _install_close_policy() -> None:
+        """安装唯一的关闭决策钩子。
+
+        这是「关还是藏」的唯一决策点：
+          - 系统关机/注销  -> 放行，不隐藏，不阻塞
+          - 任务管理器结束 -> 放行，不拦截
+          - 程序主动退出   -> 放行（日志已在 quit_app 写好）
+          - 用户点 X       -> 托盘可用则隐藏，否则放行
+        """
+        try:
+            from System.Windows.Forms import CloseReason
+        except Exception as exc:
+            logger.log(f"无法加载 WinForms 关闭原因枚举，关闭策略退化为默认：{exc}")
+            return
+
+        form = getattr(window, "native", None)
+        if form is None:
+            logger.log(
+                "警告：未能获取主窗口 WinForms 句柄，"
+                "关闭原因将无法精确区分（将退化为通用文案）"
+            )
+            return
+
+        def _on_form_closing(sender, args):
+            reason = args.CloseReason
+
+            # 程序已主动退出：直接放行，日志已在 quit_app 记录
+            if state["quitting"]:
+                args.Cancel = False
+                return
+
+            # 系统关机 / 注销：放行，绝不隐藏、绝不阻塞
+            if reason == CloseReason.WindowsShutDown:
+                args.Cancel = False
+                if not state["close_logged"]:
+                    logger.log(
+                        "软件关闭：系统关机或注销，非用户操作（Windows 会话结束）"
+                    )
+                    state["close_logged"] = True
+                _clear_marker()
+                return
+
+            # 任务管理器结束：放行，不拦截（拦截无意义且不友好）
+            if reason == CloseReason.TaskManagerClosing:
+                args.Cancel = False
+                return
+
+            # 用户点窗口 X
+            if reason == CloseReason.UserClosing:
+                if not tray.available:
+                    args.Cancel = False
+                    if not state["close_logged"]:
+                        logger.log(
+                            "软件关闭：用户关闭窗口（托盘不可用，程序随之退出）"
+                        )
+                        state["close_logged"] = True
+                    _clear_marker()
+                    return
+                # 托盘可用：隐藏到托盘，取消关闭
+                args.Cancel = True
+                try:
+                    window.hide()
+                    logger.log("窗口已隐藏到托盘（未退出，后台继续运行）")
+                except Exception as exc:
+                    logger.log(f"隐藏窗口失败：{exc}")
+                    args.Cancel = False
+                return
+
+            # 其他原因（ApplicationExitCall 等）：放行
+            args.Cancel = False
+
+        try:
+            form.FormClosing += _on_form_closing
+            logger.log("已安装关闭策略钩子（CloseReason 驱动）")
+        except Exception as exc:
+            logger.log(f"安装关闭策略钩子失败：{exc}")
+
     def start_services() -> None:
+        _install_close_policy()
+
         if not tray.start():
             logger.log("托盘不可用：关闭窗口将直接退出程序")
         else:

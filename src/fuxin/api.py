@@ -194,5 +194,6 @@ class Api:
 
     # ------------------------------------------------------------ 退出
     def shutdown(self) -> dict:
-        self.monitor.stop(by_user=False, reason="软件关闭", wait=True, timeout=2.0)
+        self.monitor.stop(by_user=False, reason="界面退出", wait=True, timeout=2.0)
+        self.logger.log("软件关闭：用户手动退出（界面按钮）")
         return self._reply(True, "bye")

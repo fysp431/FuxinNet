@@ -13,6 +13,7 @@ AUTHOR_EMAIL = "2872058826@qq.com"
 
 CONFIG_NAME = "fuxin_config.dat"
 LOG_NAME = "fuxin_log.txt"
+RUNNING_MARKER_NAME = "fuxin_running.marker"
 MUTEX_NAME = "FUXIN_XiaoWangTong_Mutex_Py"
 RUN_VALUE_NAME = "福信校网通"
 
@@ -52,3 +53,7 @@ def config_path() -> str:
 
 def log_path() -> str:
     return os.path.join(app_dir(), LOG_NAME)
+
+
+def running_marker_path() -> str:
+    return os.path.join(app_dir(), RUNNING_MARKER_NAME)

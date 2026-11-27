@@ -240,19 +240,21 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 产物名中的版本号由 `src/fuxin/paths.py` 的 `APP_VERSION` 自动生成，发版时只改该常量即可，无需再动 spec。
 
 
-已经在 spec/代码里处理掉的三个坑（改配置时别删）：
+已经在 spec/代码里处理掉的四个坑（改配置时别删）：
 
 | 现象                                                   | 原因                                 | 处理                                                        |
 | ---------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
 | `Could not create temporary directory!`              | `runtime_tmpdir` 用了相对路径 `.`，解析的是进程当前工作目录；开机自启时 CWD 为 `C:\Windows`，普通用户不可写 | spec 里改为 `runtime_tmpdir=r"%LOCALAPPDATA%\FuxinNet\tmp"`，固定为用户可写绝对路径，与 CWD 无关 |
 | `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集"        | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
 | 窗口白屏                                                 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录   |
+| 关机被阻塞 / 日志误记为后台运行                                   | pywebview closing 在关机时返回 False 会否决关机 | 改用 WinForms FormClosing + CloseReason 单一决策，关机分支不隐藏窗口 |
 
 ## 运行期文件
 
 | 文件                       | 说明                              |
 | ------------------------ | ------------------------------- |
 | `fuxin_config.dat`       | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 + `auto_run`（上次退出时监控是否在运行） |
+| `fuxin_running.marker`   | 运行标记，用于识别上次是否异常关闭；正常退出时自动删除 |
 | `fuxin_log.txt`          | 运行日志（UTF-8 / CRLF / `[时间] 内容`），超 2 MB 自动轮转为 `.1`~`.3` |
 | `fuxin_log_export_*.txt` | 「导出日志」的副本                       |
 | `webview_data\`          | WebView2 缓存，可删                  |
