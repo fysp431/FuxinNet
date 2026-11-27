@@ -244,7 +244,7 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 
 | 现象                                                   | 原因                                 | 处理                                                        |
 | ---------------------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| `Could not create temporary directory!`              | 某些目录/策略下无法用 `%TEMP%` 解包            | spec 里 `runtime_tmpdir="."`，改在 exe 旁解包（退出自动清理）            |
+| `Could not create temporary directory!`              | `runtime_tmpdir` 用了相对路径 `.`，解析的是进程当前工作目录；开机自启时 CWD 为 `C:\Windows`，普通用户不可写 | spec 里改为 `runtime_tmpdir=r"%LOCALAPPDATA%\FuxinNet\tmp"`，固定为用户可写绝对路径，与 CWD 无关 |
 | `Failed to resolve Python.Runtime.Loader.Initialize` | .NET Framework 把路径判为"远程程序集"        | `run.py` 导入前自动写 `<exe>.config`，打开 `loadFromRemoteSources` |
 | 窗口白屏                                                 | 中文路径 / `file://` 在 WebView2 偶发加载失败 | UI 改由本地回环服务加载（`http_server=True`），`storage_path` 固定数据目录   |
 
