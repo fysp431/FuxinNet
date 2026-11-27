@@ -125,7 +125,7 @@ def main() -> int:
         url=html_path,
         js_api=api,
         width=680,
-        height=880,
+        height=760,
         min_size=(560, 720),
         background_color="#eef2f8",
         text_select=False,
