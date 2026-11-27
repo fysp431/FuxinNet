@@ -9,7 +9,13 @@
   <img alt="ui" src="https://img.shields.io/badge/UI-pywebview%20%2B%20WebView2-18a058">  
 </p>
 
-![界面截图](docs/screenshot.png)
+<p align="center">
+  <a href="docs/screenshot.png"><img src="docs/screenshot.png" alt="界面截图" width="520"></a>
+</p>
+
+---
+
+[这是什么](#这是什么) · [功能特性](#功能特性) · [下载与安装](#下载与安装) · [快速上手](#快速上手) · [使用说明](#使用说明) · [工作原理](#工作原理) · [常见问题](#常见问题) · [技术栈](#技术栈) · [目录结构](#目录结构) · [本地开发](#本地开发) · [打包](#打包) · [运行期文件](#运行期文件) · [免责声明](#免责声明) · [许可证](#许可证) · [作者](#作者)
 
 ---
 
