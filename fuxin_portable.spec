@@ -5,7 +5,7 @@
 可以用这个目录版，行为完全一致。
     python -m PyInstaller --noconfirm --clean fuxin_portable.spec
 
-产物目录名形如 FuxinNet_v2.0.1-alpha1\：版本号自动从 src/fuxin/paths.py 的
+产物目录名形如 FuxinNet_v2.0.1-alpha2\：版本号自动从 src/fuxin/paths.py 的
 APP_VERSION 读取，发版时只需改 paths.py 一处，无需再同步本文件。
 """
 

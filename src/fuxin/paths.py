@@ -6,7 +6,7 @@ import os
 import sys
 
 APP_NAME = "福信校网通"
-APP_VERSION = "v2.0.1-alpha1"
+APP_VERSION = "v2.0.1-alpha2"
 APP_SUBTITLE = "校园网自动认证助手"
 AUTHOR = "fysp431"
 AUTHOR_EMAIL = "2872058826@qq.com"
