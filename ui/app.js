@@ -8,6 +8,9 @@
   const $ = (id) => document.getElementById(id);
 
   const el = {
+    notice: $("notice"),
+    noticeText: $("noticeText"),
+    noticeClose: $("noticeClose"),
     subtitle: $("subtitle"),
     pill: $("pill"),
     pillText: $("pillText"),
@@ -117,6 +120,16 @@
 
     renderAutoStart();
     refreshSaveButtons();
+  }
+
+  function showLoadError(loadError) {
+    if (!loadError) {
+      el.notice.hidden = true;
+      return;
+    }
+    el.noticeText.textContent =
+      "配置文件读取异常，部分设置已恢复默认：" + loadError;
+    el.notice.hidden = false;
   }
 
   function renderAutoStart() {
@@ -297,6 +310,7 @@
     if (data.subtitle) el.subtitle.textContent = data.subtitle;
     if (data.cursor) state.cursor = data.cursor;
     hydrateConfig(data.config);
+    showLoadError(data.loadError);
     if (data.state) {
       state.running = !!data.state.running;
       state.stopping = !!data.state.stopping;
@@ -346,11 +360,11 @@
       el.autoScope.disabled = true;
       const reply = await call("set_autostart_scope", scope);
       if (reply) {
+        // 信任后端 normalize_scope 的归一化结果，不用请求值覆盖本地状态
         if (reply.autostartScope) state.autostartScope = reply.autostartScope;
         if (typeof reply.autostart === "boolean") state.autostart = reply.autostart;
         toast(reply.message || "已切换");
       }
-      state.autostartScope = scope;
       renderAutoStart();
       el.autoScope.disabled = false;
     });
@@ -359,15 +373,16 @@
       el.autoStart.disabled = true;
       const want = !state.autostart;
       const reply = await call("set_autostart", want, state.autostartScope);
-      if (reply && typeof reply.autostart === "boolean") {
-        state.autostart = reply.autostart;
-      } else if (reply && reply.ok) {
-        state.autostart = want;
+      if (reply) {
+        // 以后端回包为准；system 作用域下 renderAutoStart 会重新置灰
+        if (typeof reply.autostart === "boolean") state.autostart = reply.autostart;
+        if (reply.autostartScope) state.autostartScope = reply.autostartScope;
+        toast(
+          reply.message ||
+            (state.autostart ? "开机自启已开启" : "开机自启已关闭")
+        );
       }
-      if (reply && reply.autostartScope) state.autostartScope = reply.autostartScope;
       renderAutoStart();
-      if (reply) toast(reply.message || (state.autostart ? "开机自启已开启" : "开机自启已关闭"));
-      el.autoStart.disabled = false;
     });
 
     el.eyeBtn.addEventListener("click", () => {
@@ -385,8 +400,25 @@
       if (reply && !reply.ok) toast(reply.message || "无法打开目录");
     });
 
+    el.noticeClose.addEventListener("click", () => {
+      el.notice.hidden = true;
+    });
+
     for (const input of [el.userInput, el.passInput, el.freqInput]) {
-      input.addEventListener("input", refreshSaveButtons);
+      if (input === el.userInput || input === el.passInput) {
+        // 只允许 ASCII 可打印字符：过滤中文、空格、emoji 与控制字符。
+        // 后端 save_user / save_pass 还会再校验一次，前端过滤可被绕过也不能省后端。
+        input.addEventListener("input", () => {
+          const cleaned = input.value.replace(/[^\x21-\x7E]/g, "");
+          if (cleaned !== input.value) {
+            input.value = cleaned;
+            toast("已过滤中文、空格与不可见字符");
+          }
+          refreshSaveButtons();
+        });
+      } else {
+        input.addEventListener("input", refreshSaveButtons);
+      }
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           if (input === el.userInput) el.saveUser.click();

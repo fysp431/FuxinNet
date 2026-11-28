@@ -16,12 +16,13 @@ from __future__ import annotations
 
 import http.client
 import os
+import queue
 import re
 import ssl
+import threading
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Optional
 
 DEFAULT_PORTAL_HOST = "172.16.9.11"
 MAX_HOPS = 6
@@ -71,10 +72,6 @@ class Response:
     error: str = ""
 
     @property
-    def ok(self) -> bool:
-        return self.status >= 200 and self.status < 400
-
-    @property
     def location(self) -> str:
         return self.headers.get("location", "")
 
@@ -85,8 +82,8 @@ class Response:
 def http_request(
     url: str,
     method: str = "GET",
-    body: Optional[bytes] = None,
-    headers: Optional[dict] = None,
+    body: bytes | None = None,
+    headers: dict | None = None,
     timeout: float = 5.0,
     max_bytes: int = HTML_LIMIT,
 ) -> Response:
@@ -154,31 +151,71 @@ def _probe(url: str, want_status: int, want_body: str = "") -> tuple[bool, str]:
     return True, "匹配"
 
 
+def _probe_timed(
+    name: str, url: str, want_status: int, want_body: str
+) -> tuple[str, bool, str, int]:
+    """执行单个探测，返回 (名称, 是否在线, 原因, 耗时毫秒)。"""
+    started = time.monotonic()
+    try:
+        ok, reason = _probe(url, want_status, want_body)
+    except Exception as exc:  # 探测内部异常只影响本源
+        ok, reason = False, f"异常={type(exc).__name__}"
+    return name, ok, reason, int((time.monotonic() - started) * 1000)
+
+
 def check_online(logger=None, stop=None) -> bool:
-    """多源探测，任一口径通过即在线；全失败才判离线。
+    """多源并发探测，任一源通过即判在线；全失败才判离线。
+
+    三个源并发而不是串行，最坏耗时从 3×PROBE_TIMEOUT 降到约 PROBE_TIMEOUT，
+    保证低于 10 秒的最小检测间隔（否则 10 秒/次的节奏会漂移）。
+    线程用 daemon：探测超时不会拖住程序退出，也无法被强制取消，结果被忽略即可。
 
     每个源都输出一行运行数据（耗时 / 状态 / 失败原因），方便事后定位
     "到底是真的断网、还是某个探测源被墙/被劫持"。
     """
     results: list[str] = []
+    outcomes: queue.Queue[tuple[str, bool, str, int]] = queue.Queue()
+    threads: list[threading.Thread] = []
+
+    if stop is not None and stop.is_set():
+        _diag(logger, "连通性探测被停止请求中断")
+        return False
+
     for name, url, want_status, want_body in _PROBES:
+        thread = threading.Thread(
+            target=lambda n=name, u=url, ws=want_status, wb=want_body: outcomes.put(
+                _probe_timed(n, u, ws, wb)
+            ),
+            name=f"fuxin-probe-{name}",
+            daemon=True,
+        )
+        threads.append(thread)
+        thread.start()
+
+    online = False
+    while len(results) < len(threads):
         if stop is not None and stop.is_set():
-            _diag(logger, "连通性探测被停止请求中断：" + " ".join(results))
-            return False
-        started = time.monotonic()
-        ok, reason = _probe(url, want_status, want_body)
-        cost = int((time.monotonic() - started) * 1000)
+            break
+        try:
+            name, ok, reason, cost = outcomes.get(timeout=0.1)
+        except queue.Empty:
+            continue
         results.append(f"{name}={'OK' if ok else reason}({cost}ms)")
         if ok:
-            if stop is not None and stop.is_set():
-                _diag(logger, "连通性探测 " + " ".join(results) + " → 已停止，忽略结果")
-            else:
-                _diag(logger, "连通性探测 " + " ".join(results) + " → 在线")
-            return True
+            online = True
+            break
+
+    result_text = " ".join(results) if results else "（无结果）"
+    if online:
+        if stop is not None and stop.is_set():
+            _diag(logger, f"连通性探测 {result_text} → 已停止，忽略结果")
+            return False
+        _diag(logger, f"连通性探测 {result_text} → 在线")
+        return True
     if stop is not None and stop.is_set():
-        _diag(logger, "连通性探测 " + " ".join(results) + " → 已停止，忽略结果")
+        _diag(logger, f"连通性探测 {result_text} → 已停止，忽略结果")
         return False
-    _diag(logger, "连通性探测 " + " ".join(results) + " → 离线")
+    _diag(logger, f"连通性探测 {result_text} → 离线")
     return False
 
 
@@ -226,29 +263,44 @@ def extract_jump(html: str, base: str) -> str:
     return ""
 
 
-def follow_chain(url: str, logger, depth: int = 0, stop=None) -> str:
-    """跟随 302 链与 200 页面的 JS/meta 跳转，返回认证页 URL（找不到返回空串）。"""
+def follow_chain(
+    url: str, logger, depth: int = 0, stop=None, on_url=None
+) -> str:
+    """跟随 302 链与 200 页面的 JS/meta 跳转，返回认证页 URL（找不到返回空串）。
+
+    ``on_url`` 可选：每访问一个 URL 回调一次，用于认证失败时落盘跳转链。
+    """
     if depth > MAX_HOPS or not url:
         return ""
     if stop is not None and stop.is_set():
         return ""
+    if on_url is not None:
+        on_url(url)
     started = time.monotonic()
     resp = http_request(url, timeout=5.0, max_bytes=HTML_LIMIT)
     cost = int((time.monotonic() - started) * 1000)
     if resp.error or resp.status == 0:
-        _diag(logger, f"跳转深度{depth} 请求失败 url={url[:80]} 用时={cost}ms err={resp.error[:80]}")
+        _diag(
+            logger,
+            f"跳转深度{depth} 请求失败 url={url[:80]} 用时={cost}ms "
+            f"err={resp.error[:80]}",
+        )
         return ""
 
     if resp.status == 200:
         html = resp.text("utf-8")
         target = extract_jump(html, url)
         if not target:
-            _diag(logger, f"跳转深度{depth} 200 无跳转 url={url[:60]} 长度={len(html)} 用时={cost}ms")
+            _diag(
+                logger,
+                f"跳转深度{depth} 200 无跳转 url={url[:60]} "
+                f"长度={len(html)} 用时={cost}ms",
+            )
             return ""
         _diag(logger, f"跳转深度{depth} HTML跳转 → {target}")
         if is_auth_page(target):
             return target
-        return follow_chain(target, logger, depth + 1, stop)
+        return follow_chain(target, logger, depth + 1, stop, on_url)
 
     location = resp.location
     _diag(
@@ -263,10 +315,10 @@ def follow_chain(url: str, logger, depth: int = 0, stop=None) -> str:
         return ""
     if is_auth_page(location):
         return location
-    return follow_chain(location, logger, depth + 1, stop)
+    return follow_chain(location, logger, depth + 1, stop, on_url)
 
 
-def find_portal_url(logger, stop=None) -> str:
+def find_portal_url(logger, stop=None, on_url=None) -> str:
     """依次尝试三个入口，返回带参数的认证页 URL。"""
     host = portal_host()
     entries = [
@@ -278,7 +330,7 @@ def find_portal_url(logger, stop=None) -> str:
         if stop is not None and stop.is_set():
             return ""
         logger.log(f"[数据] 尝试门户入口：{entry[:80]}")
-        found = follow_chain(entry, logger, 0, stop)
+        found = follow_chain(entry, logger, 0, stop, on_url)
         if found:
             return found
     return ""

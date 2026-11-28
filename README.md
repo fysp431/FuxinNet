@@ -43,7 +43,9 @@
 - 失败间隔 30 秒重试，连续 3 次自动停止并复位界面
 - 账号/密码错误（"用户不存在""密码不匹配"）**立即停止**，不无意义重试，直接显示网关原文；网关公钥异常等不可恢复错误同样立即停止
 - 状态变化记事件日志；每次检测另记一行运行数据（各探测源耗时/结果、认证步骤耗时），便于事后排查
-- 日志超过 2 MB 自动轮转，保留 3 份历史（`.1`~`.3`）
+- 三源探测并发执行，最坏耗时约 5 秒，不会被串行 3×5 秒拖过 10 秒的最小检测间隔
+- 认证失败自动落盘诊断文件（pageInfo / login 原始响应 + 跳转链，脱敏、单份 ≤ 256 KB），主日志只记路径摘要
+- 日志超过 2 MB 自动轮转，保留 3 份历史（`.1`~`.3`）；导出时拼接轮转历史，保留完整日期
 - 检测频率最低 **10 秒/次**；需在停止状态下修改，下次启动生效
 
 **自动运行与关机记录**
@@ -60,6 +62,8 @@
 - 自启说明右侧有圈形感叹号，悬停可查看自动运行 / 等待网络 / 关机行为的说明
 - 运行中与停止收尾期间锁定账号、密码与频率，防止误改
 - 保存按钮两态（有改动才可点）、密码显隐
+- 学号/密码输入即时过滤中文、空格与不可见字符；保存失败时提示可读原因并回滚本次修改
+- 配置文件损坏时顶部显示可关闭的黄色提示条，不再静默按默认值启动
 - 日志实时滚动，支持导出与打开所在目录
 
 **托盘与自启**
@@ -73,6 +77,8 @@
 
 - 学号密码用 `AES-GCM` 加密后存本地（`SHA256("fuxin-xiaowangtong|" + salt)` 派生密钥），不联网上传
 - 日志自动脱敏：`mac` / `wlanuserip` / `nasportid` 等网络标识只保留前 4 位（含 URL 编码与 JSON 形式）；password / pwd / token / ticket 字段整体打码
+- 学号/密码只接受 ASCII 可打印字符（0x21-0x7E），前端过滤 + 后端白名单双重校验，防绕过
+- 程序目录不可写时自动回退到 `%LOCALAPPDATA%\FuxinNet`，并迁移旧配置，不再静默丢设置
 - 单实例：重复双击只会把已有窗口叫出来
 
 ## 下载与安装
@@ -84,7 +90,7 @@
 4. 需要 **WebView2 运行时**：Win11 与较新的 Win10 自带 Edge 即可；若提示无法初始化界面内核，  
    安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 后重试
 
-> 首次运行会在 exe 同目录生成 `fuxin_log.txt`、`fuxin_config.dat`、`fuxin_running.marker`、`webview_data\`，属正常产物。
+> 首次运行会在程序目录生成 `fuxin_log.txt`、`fuxin_config.dat`、`fuxin_running.marker`、`webview_data\`，属正常产物；该目录不可写时会自动改到 `%LOCALAPPDATA%\FuxinNet\`。
 
 ## 快速上手
 
@@ -109,7 +115,7 @@
 | 关闭窗口 | 隐藏到托盘，后台继续运行                          |
 | 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志）                |
 | 关机/注销 | 记录「系统关机或注销，非用户操作」后放行，不阻塞系统关机；若进程被强杀，下次启动补记异常关闭 |
-| 日志   | exe 同目录 `fuxin_log.txt`，也可在界面「导出日志」   |
+| 日志   | 程序目录（不可写时回退 `%LOCALAPPDATA%\FuxinNet`）的 `fuxin_log.txt`，也可在界面「导出日志」 |
 
 ## 工作原理
 
@@ -193,6 +199,25 @@ POST /eportal/InterFace.do?method=login
 
 <details>
 
+<summary><b>放在 Program Files 里，设置和日志去哪了？</b></summary>
+
+程序目录不可写时，运行期文件会自动切换到 `%LOCALAPPDATA%\FuxinNet\`，并把旧位置的
+`fuxin_config.dat` 复制过去；启动日志第一行会写明本次使用的数据目录。
+
+</details>
+
+<details>
+
+<summary><b>认证失败时多出来的 fuxin_dump_*.txt 是什么？</b></summary>
+
+是一次认证失败的诊断现场：pageInfo / login 的原始响应和跳转链 URL，已经脱敏
+（mac、wlanuserip、password、token 等打码），单份不超过 256 KB，只在失败时生成。
+反馈问题时可以连同 `fuxin_log.txt` 一起提供。
+
+</details>
+
+<details>
+
 <summary><b>认证一直失败怎么排查</b></summary>
 
 看日志最后几行：
@@ -226,48 +251,49 @@ POST /eportal/InterFace.do?method=login
 ├─ run.py                 # 入口（写 .NET app.config → 起界面）
 ├─ fuxin.spec             # 单文件打包
 ├─ fuxin_portable.spec    # 免解压目录版打包
-├─ requirements.txt
+├─ requirements.txt       # 运行期依赖
+├─ requirements-dev.txt   # 构建 / 测试期依赖
+├─ pyproject.toml         # ruff / pytest 配置
 ├─ assets/                # 图标
 ├─ docs/                  # 截图
 ├─ ui/                    # 前端：index.html / style.css / app.js
 ├─ src/fuxin/
 │  ├─ main.py             # DPI、单实例、托盘、关闭策略、窗口
-│  ├─ paths.py            # 路径与常量（exe 目录、运行标记）
-│  ├─ logger.py           # 日志：文件 + 内存 + 脱敏
+│  ├─ paths.py            # 路径与常量（数据目录探测 / 回退 / 迁移）
+│  ├─ logger.py           # 日志：文件 + 内存 + 脱敏 + 导出
 │  ├─ config.py           # 配置：AES-GCM 读写
-│  ├─ net.py              # 直连 HTTP、探测、跳转链
+│  ├─ diagnostics.py      # 认证失败诊断落盘（脱敏、限 256 KB）
+│  ├─ net.py              # 直连 HTTP、并发探测、跳转链
 │  ├─ auth.py             # pageInfo / RSA / login / 完整认证
 │  ├─ worker.py           # 监控线程与重试状态机
 │  ├─ tray.py             # 系统托盘
 │  ├─ autostart.py        # 开机自启（用户级 / 系统级预留）
 │  └─ api.py              # 前端桥（轮询 + 保存 + 启停 + 日志）
-├─ tools/selftest.py      # 核心自测（RSA / 转义 / mock 网关 / 配置）
-└─ tools/test_p0.py       # P0 回归（脱敏 / URL / 登录解析 / RSA / 线程生命周期 / api.stop / 频率下限）
+└─ tests/                 # pytest 用例（脱敏 / URL / RSA / 线程 / api / 路径回退）
 ```
 
 ## 本地开发
 
 > **必须用 Python 3.11**：pythonnet 3.2+ 只提供 netstandard2.1 程序集，.NET Framework 4.8 加载不了；  
-> 3.11 + pythonnet 3.0.5 才能走系统自带 .NET Framework，打包后的 exe 也才能"开箱即用"。
+> 只有 3.11 + pythonnet 3.0.5 才能走系统自带 .NET Framework，打包后的 exe 也才能"开箱即用"。  
+> 3.12 / 3.13 下的兼容性**没有验证过**，不要用它们打包或跑测试。
 
 ```bat
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\pip install pythonnet==3.0.5 pyinstaller
+.venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python run.py
 ```
 
-核心逻辑自测（不需要校园网，会在本地起一个 mock ePortal）：
+运行测试与静态检查（不需要校园网；认证流程用本地 mock ePortal）：
 
 ```bat
-.venv\Scripts\python tools\selftest.py
+.venv\Scripts\python -m pytest
+.venv\Scripts\python -m ruff check .
 ```
 
-P0 回归（脱敏 / URL / 登录解析 / RSA / 线程生命周期 / api.stop / 频率下限）：
-
-```bat
-.venv\Scripts\python tools\test_p0.py
-```
+`tests/` 覆盖脱敏、URL 解析、RSA、完整认证流程、配置、线程生命周期、
+api 保存/校验、数据目录回退与迁移；CI（`.github/workflows/ci.yml`）在
+Python 3.11 上跑同样的两条命令。
 
 ## 打包
 
@@ -291,12 +317,17 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 
 ## 运行期文件
 
+默认都在程序（exe）同目录。若该目录不可写（如 `C:\Program Files`、只读介质），
+程序启动时会自动回退到 `%LOCALAPPDATA%\FuxinNet\`，并把旧位置的
+`fuxin_config.dat` 复制过去；选定的目录会写进日志开头，方便排障。
+
 | 文件                       | 说明                              |
 | ------------------------ | ------------------------------- |
 | `fuxin_config.dat`       | 学号/密码（AES-GCM 密文）+ 检测频率 + 自启作用域 + `auto_run`（上次退出时监控是否在运行） |
 | `fuxin_running.marker`   | 运行标记，用于识别上次是否异常关闭；正常退出时自动删除 |
 | `fuxin_log.txt`          | 运行日志（UTF-8 / CRLF / `[时间] 内容`），超 2 MB 自动轮转为 `.1`~`.3` |
-| `fuxin_log_export_*.txt` | 「导出日志」的副本                       |
+| `fuxin_dump_*.txt`       | 认证失败诊断现场（pageInfo / login 原始响应 + 跳转链，已脱敏，单份 ≤ 256 KB；仅在失败时生成） |
+| `fuxin_log_export_*.txt` | 「导出日志」的副本，包含 `.1`~`.3` 轮转历史与完整日期时间戳 |
 | `webview_data\`          | WebView2 缓存，可删                  |
 
 ## 免责声明

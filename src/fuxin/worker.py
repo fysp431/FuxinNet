@@ -18,7 +18,6 @@ from __future__ import annotations
 import threading
 import time
 import traceback
-from typing import Optional
 
 from . import auth, net, paths
 
@@ -44,13 +43,13 @@ class Monitor:
         self.config = config
         self.logger = logger
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.RLock()
         self._run_id = 0
         self._stop_reason = ""
         self._stop_error = False
         self.phase = PHASE_IDLE
-        self.online: Optional[bool] = None
+        self.online: bool | None = None
         self.fail_count = 0
         self.last_check = ""
         self.last_message = "点击「启动」开始自动检测网络"
@@ -114,6 +113,11 @@ class Monitor:
                 "message": self.last_message,
             }
 
+    def set_message(self, message: str) -> None:
+        """供 api 层使用的持锁写法，避免直接赋值与工作线程竞态。"""
+        with self._lock:
+            self.last_message = message
+
     # ------------------------------------------------------------ 启停
     def start(self) -> tuple[bool, str]:
         with self._lock:
@@ -146,7 +150,8 @@ class Monitor:
             self._thread = thread
 
         self.logger.log(
-            f"========== 启动监控 run={run_id} 频率={interval}秒/次 门户={net.portal_host()} =========="
+            f"========== 启动监控 run={run_id} 频率={interval}秒/次 "
+            f"门户={net.portal_host()} =========="
         )
         thread.start()
         try:
@@ -240,7 +245,7 @@ class Monitor:
     def _loop(
         self, run_id: int, stop: threading.Event, user: str, password: str
     ) -> None:
-        last_online: Optional[bool] = None
+        last_online: bool | None = None
         if not self._wait_network_ready(run_id, stop):
             return
         interval = max(paths.MIN_FREQ, self.config.freq_value())
@@ -260,9 +265,9 @@ class Monitor:
         stop: threading.Event,
         user: str,
         password: str,
-        last_online: Optional[bool],
+        last_online: bool | None,
         check_no: int,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         if not self._alive(run_id, stop):
             return last_online
         self._update(run_id, phase=PHASE_CHECKING)
@@ -295,8 +300,7 @@ class Monitor:
             return True
 
         self.logger.log(f"检测到断网（第{check_no}次检测），开始认证")
-        self._authenticate_loop(run_id, stop, user, password, check_no)
-        return False
+        return self._authenticate_loop(run_id, stop, user, password, check_no)
 
     def _authenticate_loop(
         self,
@@ -305,7 +309,8 @@ class Monitor:
         user: str,
         password: str,
         check_no: int,
-    ) -> None:
+    ) -> bool:
+        """认证直到成功、不可恢复失败或次数用尽；返回是否认证成功。"""
         fail = 0
         while self._alive(run_id, stop):
             self._update(run_id, phase=PHASE_AUTHING, fail_count=fail)
@@ -318,13 +323,13 @@ class Monitor:
                 auth.try_authenticate(stop, self.logger, user, password)
             except auth.AuthStopped:
                 self.logger.log(f"[认证] 收到停止请求，认证中止 run={run_id}")
-                return
+                return False
             except auth.AuthFatal as exc:
                 message = str(exc)
                 self.logger.log(f"认证失败（不可恢复）：{message}")
                 self._update(run_id, last_message=message)
                 self.stop(by_user=False, reason=message, error=True)
-                return
+                return False
             except auth.AuthFailed as exc:
                 message = str(exc)
                 cost = int((time.monotonic() - started) * 1000)
@@ -332,7 +337,7 @@ class Monitor:
                     self.logger.log(f"认证失败（账号错误）：{message}")
                     self._update(run_id, last_message=message)
                     self.stop(by_user=False, reason=message, error=True)
-                    return
+                    return False
                 fail += 1
                 self._update(run_id, fail_count=fail, last_message=message)
                 self.logger.log(f"[认证] 第{fail}次失败 用时={cost}ms：{message}")
@@ -340,10 +345,10 @@ class Monitor:
                     self.logger.log(f"已认证失败 {MAX_FAIL} 次，不再重新尝试")
                     self._update(run_id, last_message="已认证失败 3 次，不再重新尝试")
                     self.stop(by_user=False, reason="已认证失败 3 次，不再重新尝试", error=True)
-                    return
+                    return False
                 self.logger.log(f"已认证失败 {fail} 次，{RETRY_GAP} 秒后重新尝试")
                 if stop.wait(RETRY_GAP):
-                    return
+                    return False
                 continue
             except Exception:
                 fail += 1
@@ -351,13 +356,13 @@ class Monitor:
                 self._log_exc(f"[异常] 认证异常 run={run_id} 第{fail}次")
                 if fail >= MAX_FAIL:
                     self.stop(by_user=False, reason="认证异常次数过多", error=True)
-                    return
+                    return False
                 if stop.wait(RETRY_GAP):
-                    return
+                    return False
                 continue
 
             if not self._alive(run_id, stop):
-                return
+                return False
             cost = int((time.monotonic() - started) * 1000)
             self._update(
                 run_id,
@@ -367,7 +372,8 @@ class Monitor:
                 last_message="认证成功，网络已恢复",
             )
             self.logger.log(f"[认证] 认证成功，网络已恢复 用时={cost}ms")
-            return
+            return True
+        return False
 
     def _wait_network_ready(self, run_id: int, stop: threading.Event) -> bool:
         """等待门户可达；期间不计入认证失败次数。

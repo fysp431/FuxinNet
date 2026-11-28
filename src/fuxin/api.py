@@ -11,6 +11,17 @@ import time
 
 from . import autostart, paths
 
+# 学号/密码白名单：ASCII 可打印字符（0x21-0x7E），排除中文、空格与控制字符
+_CREDENTIAL_MIN = 0x21
+_CREDENTIAL_MAX = 0x7E
+_SAVE_FAILED = "保存失败：数据目录不可写，本次修改未生效"
+
+
+def _invalid_credential(value: str) -> bool:
+    return any(
+        not (_CREDENTIAL_MIN <= ord(char) <= _CREDENTIAL_MAX) for char in value
+    )
+
 
 class Api:
     def __init__(self, config, logger, monitor) -> None:
@@ -26,12 +37,13 @@ class Api:
             "subtitle": paths.APP_SUBTITLE,
             "author": paths.AUTHOR,
             "email": paths.AUTHOR_EMAIL,
-            "appDir": paths.app_dir(),
+            "appDir": paths.data_dir(),
             "logPath": paths.log_path(),
             "cursor": self.logger.cursor(),
             "entries": self.logger.snapshot(200),
             "config": self._config_view(),
             "state": self.monitor.snapshot(),
+            "loadError": self.config.load_error,
             "autostart": autostart.is_enabled(self.config.autostart_scope),
             "autostartScope": self.config.autostart_scope,
             "autostartSystemSupported": autostart.is_supported(autostart.SCOPE_SYSTEM),
@@ -68,19 +80,38 @@ class Api:
         }
 
     # ------------------------------------------------------------ 配置
+    def _persist(self) -> bool:
+        """保存配置；磁盘异常统一转成可读文案，不再把 OSError 抛给 JS 层。"""
+        try:
+            self.config.save()
+        except OSError as exc:
+            self.logger.log(f"保存配置失败：{exc}")
+            return False
+        return True
+
     def save_user(self, value: str) -> dict:
         if self.monitor.running or self.monitor.stopping:
             return self._reply(False, "正在运行，账号与频率已锁定")
         value = (value or "").strip()
         if not value:
             return self._reply(False, "学号不能为空")
+        if _invalid_credential(value):
+            return self._reply(
+                False, "学号只能包含英文、数字和英文特殊字符（不能含中文或空格）"
+            )
         if value == self.config.user:
             return self._reply(False, "学号未发生变化")
+
+        previous = self.config.user
         self.config.set_user(value)
-        self.config.save()
-        self.logger.log("学号已保存")
-        self.monitor.last_message = "学号已保存"
-        return self._reply(True, "学号已保存")
+        if not self._persist():
+            self.config.set_user(previous)
+            return self._reply(False, _SAVE_FAILED)
+
+        message = "学号已保存"
+        self.logger.log(message)
+        self.monitor.set_message(message)
+        return self._reply(True, message)
 
     def save_pass(self, value: str) -> dict:
         if self.monitor.running or self.monitor.stopping:
@@ -88,13 +119,23 @@ class Api:
         value = value or ""
         if not value:
             return self._reply(False, "密码不能为空")
+        if _invalid_credential(value):
+            return self._reply(
+                False, "密码只能包含英文、数字和英文特殊字符（不能含中文或空格）"
+            )
         if value == self.config.password:
             return self._reply(False, "密码未发生变化")
+
+        previous = self.config.password
         self.config.set_password(value)
-        self.config.save()
-        self.logger.log("密码已保存")
-        self.monitor.last_message = "密码已保存"
-        return self._reply(True, "密码已保存")
+        if not self._persist():
+            self.config.set_password(previous)
+            return self._reply(False, _SAVE_FAILED)
+
+        message = "密码已保存"
+        self.logger.log(message)
+        self.monitor.set_message(message)
+        return self._reply(True, message)
 
     def save_freq(self, value) -> dict:
         if self.monitor.running or self.monitor.stopping:
@@ -107,11 +148,17 @@ class Api:
             return self._reply(False, f"检测频率须为不小于 {paths.MIN_FREQ} 的整数")
         if freq == self.config.freq_value():
             return self._reply(False, "检测频率未发生变化")
+
+        previous = self.config.freq_value()
         self.config.set_freq(freq)
-        self.config.save()
-        self.logger.log(f"检测频率已调整为 {freq} 秒/次")
-        self.monitor.last_message = f"检测频率已调整为 {freq} 秒/次"
-        return self._reply(True, f"检测频率已调整为 {freq} 秒/次")
+        if not self._persist():
+            self.config.set_freq(previous)
+            return self._reply(False, _SAVE_FAILED)
+
+        message = f"检测频率已调整为 {freq} 秒/次"
+        self.logger.log(message)
+        self.monitor.set_message(message)
+        return self._reply(True, message)
 
     # ------------------------------------------------------------ 启停
     def start(self) -> dict:
@@ -131,7 +178,7 @@ class Api:
     # ------------------------------------------------------------ 日志
     def export_log(self) -> dict:
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        dest = os.path.join(paths.app_dir(), f"fuxin_log_export_{stamp}.txt")
+        dest = os.path.join(paths.data_dir(), f"fuxin_log_export_{stamp}.txt")
         try:
             self.logger.export(dest)
         except OSError as exc:
@@ -140,10 +187,10 @@ class Api:
 
     def open_log_dir(self) -> dict:
         try:
-            os.startfile(paths.app_dir())  # noqa: S606 - 只在用户点击时调用
+            os.startfile(paths.data_dir())  # noqa: S606 - 只在用户点击时调用
         except Exception as exc:
             return self._reply(False, f"无法打开目录：{exc}")
-        return self._reply(True, paths.app_dir())
+        return self._reply(True, paths.data_dir())
 
     # ------------------------------------------------------------ 开机自启
     def _autostart_reply(self, ok: bool, message: str) -> dict:
@@ -157,8 +204,11 @@ class Api:
     def set_autostart_scope(self, scope: str) -> dict:
         """切换自启作用域（记住选择，不改变开关状态）。"""
         scope = autostart.normalize_scope(scope)
+        previous = self.config.autostart_scope
         self.config.autostart_scope = scope
-        self.config.save()
+        if not self._persist():
+            self.config.autostart_scope = previous
+            return self._autostart_reply(False, _SAVE_FAILED)
         label = "用户级" if scope == autostart.SCOPE_USER else "系统级"
         self.logger.log(f"开机自启作用域切换为：{label}")
         if scope == autostart.SCOPE_SYSTEM:
@@ -168,8 +218,12 @@ class Api:
     def set_autostart(self, enabled: bool, scope: str = "") -> dict:
         """开启/关闭自启；scope 为空时用上次记住的作用域。"""
         target = autostart.normalize_scope(scope or self.config.autostart_scope)
+        previous = self.config.autostart_scope
         self.config.autostart_scope = target
-        self.config.save()
+        # 作用域落盘失败时不要动注册表：否则界面提示失败但自启已被改掉
+        if not self._persist():
+            self.config.autostart_scope = previous
+            return self._autostart_reply(False, _SAVE_FAILED)
 
         label = "用户级" if target == autostart.SCOPE_USER else "系统级"
         if not autostart.is_supported(target):
@@ -191,9 +245,3 @@ class Api:
             self.logger.log(f"已关闭{label}开机自启")
 
         return self._autostart_reply(True, "开机自启已开启" if enabled else "开机自启已关闭")
-
-    # ------------------------------------------------------------ 退出
-    def shutdown(self) -> dict:
-        self.monitor.stop(by_user=False, reason="界面退出", wait=True, timeout=2.0)
-        self.logger.log("软件关闭：用户手动退出（界面按钮）")
-        return self._reply(True, "bye")

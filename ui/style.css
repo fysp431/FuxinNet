@@ -44,6 +44,35 @@ body { overflow: hidden; }
   gap: 14px;
 }
 
+/* ---------------- 顶部提示条 ---------------- */
+.notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid #f5e3bb;
+  background: #fff8e8;
+  color: #8a5a00;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.notice[hidden] { display: none; }
+.notice-text { flex: 1 1 auto; word-break: break-all; }
+.notice-close {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.75;
+}
+.notice-close:hover { opacity: 1; }
+
 /* ---------------- 顶部 ---------------- */
 .hero {
   display: flex;

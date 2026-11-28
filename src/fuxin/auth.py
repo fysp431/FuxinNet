@@ -22,9 +22,9 @@ import re
 import threading
 import time
 import urllib.parse
-from typing import Optional
 
 from . import net
+from .diagnostics import AuthDiagnostic
 
 WAIT_PROBE_GAP = 5
 WAIT_PROBE_MAX = 60
@@ -63,16 +63,6 @@ def decode_unicode_escapes(text: str) -> str:
     return decoded
 
 
-def mask_sensitive(text: str) -> str:
-    return net_mask(text)
-
-
-def net_mask(text: str) -> str:
-    from .logger import mask_sensitive as _mask
-
-    return _mask(text)
-
-
 def _mask_user(username: str) -> str:
     """日志里只保留学号前 3 位。"""
     if len(username) <= 3:
@@ -97,7 +87,7 @@ def _urlencode(params: dict) -> str:
     return urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
 
 
-def _json_load(body: str) -> Optional[dict]:
+def _json_load(body: str) -> dict | None:
     try:
         value = json.loads(body)
     except (TypeError, ValueError):
@@ -130,13 +120,15 @@ def get_page_info(host: str, index_params: str, logger=None) -> dict:
     started = time.monotonic()
     resp = net.http_request(url, timeout=8.0)
     cost = int((time.monotonic() - started) * 1000)
-    info = {"encrypt": False, "exponent": "", "modulus": ""}
+    info = {"encrypt": False, "exponent": "", "modulus": "", "body": "", "error": ""}
     if resp.error:
+        info["error"] = resp.error
         if logger is not None:
             logger.log(f"[数据] pageInfo 请求失败 用时={cost}ms err={resp.error[:100]}")
         return info
 
     body = resp.text("utf-8")
+    info["body"] = body
     payload = _json_load(body)
     if payload is not None:
         flag = payload.get("passwordEncrypt", False)
@@ -156,7 +148,8 @@ def get_page_info(host: str, index_params: str, logger=None) -> dict:
     if logger is not None:
         bits = len(info["modulus"]) * 4 if info["modulus"] else 0
         logger.log(
-            f"[数据] pageInfo 状态={resp.status} 用时={cost}ms 加密={info['encrypt']} 公钥位数={bits}"
+            f"[数据] pageInfo 状态={resp.status} 用时={cost}ms "
+            f"加密={info['encrypt']} 公钥位数={bits}"
         )
     return info
 
@@ -198,13 +191,24 @@ def rsa_encrypt(exponent_hex: str, modulus_hex: str, plaintext: str) -> str:
 
 
 def login(
-    host: str, index_params: str, username: str, password: str, logger=None, stop=None
+    host: str,
+    index_params: str,
+    username: str,
+    password: str,
+    logger=None,
+    stop=None,
+    dump: AuthDiagnostic | None = None,
 ) -> tuple[bool, str]:
-    """提交登录，返回 (是否成功, 网页原始提示)。"""
+    """提交登录，返回 (是否成功, 网页原始提示)。
+
+    ``dump`` 非空时收集 pageInfo / login 原始响应，认证失败时由上层落盘。
+    """
     if stop is not None and stop.is_set():
         raise AuthStopped()
 
     info = get_page_info(host, index_params, logger)
+    if dump is not None:
+        dump.add("pageInfo 响应体", info.get("body", "") or info.get("error", ""))
     if stop is not None and stop.is_set():
         raise AuthStopped()
 
@@ -239,17 +243,22 @@ def login(
     )
     cost = int((time.monotonic() - started) * 1000)
     if resp.error:
+        if dump is not None:
+            dump.add("login 请求错误", resp.error)
         if logger is not None:
             logger.log(f"[数据] login 请求失败 用时={cost}ms err={resp.error[:100]}")
         return False, "无法连接认证服务器"
 
     body = resp.text("utf-8")
+    if dump is not None:
+        dump.add("login 响应体", body)
     ok, message = parse_login_result(body)
     if not ok and not message:
         message = "认证失败（服务器未返回原因）"
     if logger is not None:
         logger.log(
-            f"[数据] login 状态={resp.status} 用时={cost}ms 结果={'success' if ok else 'fail'} 提示={message[:120]}"
+            f"[数据] login 状态={resp.status} 用时={cost}ms "
+            f"结果={'success' if ok else 'fail'} 提示={message[:120]}"
         )
     return ok, message
 
@@ -261,7 +270,32 @@ def try_authenticate(
     username: str,
     password: str,
 ) -> None:
-    """成功返回 None；失败抛 AuthFailed；被停止抛 AuthStopped。"""
+    """成功返回 None；失败抛 AuthFailed；被停止抛 AuthStopped。
+
+    失败时把本次的原始响应落盘为诊断文件（已脱敏），主日志只记路径摘要。
+    """
+    dump = AuthDiagnostic(logger)
+    dump.add("账号", _mask_user(username))
+    try:
+        _authenticate_flow(stop, logger, username, password, dump)
+    except AuthStopped:
+        raise
+    except AuthFailed as exc:
+        dump.reason = str(exc)
+        path = dump.save()
+        if path:
+            logger.log(f"[诊断] 认证失败现场已保存：{path}")
+        raise
+
+
+def _authenticate_flow(
+    stop: threading.Event,
+    logger,
+    username: str,
+    password: str,
+    dump: AuthDiagnostic,
+) -> None:
+    """认证主流程；各失败分支抛 AuthFailed，由 try_authenticate 统一落盘。"""
     host = net.portal_host()
     started = time.monotonic()
 
@@ -272,19 +306,21 @@ def try_authenticate(
     if net.check_online(logger, stop=stop):
         if _stopped(stop):
             raise AuthStopped()
-        logger.log(f"[数据] 认证前复检：网络已在线，跳过认证 用时={int((time.monotonic() - started) * 1000)}ms")
+        cost = int((time.monotonic() - started) * 1000)
+        logger.log(f"[数据] 认证前复检：网络已在线，跳过认证 用时={cost}ms")
         return
     if _stopped(stop):
         raise AuthStopped()
 
     logger.log(f"[认证] 开始认证 门户={host} 账号={_mask_user(username)}")
-    portal_url = net.find_portal_url(logger, stop)
+    portal_url = net.find_portal_url(logger, stop, on_url=dump.add_url)
     if _stopped(stop):
         raise AuthStopped()
 
     if not portal_url:
         # 区分诊断：服务器能不能直连
         probe = net.http_request(f"http://{host}/eportal/InterFace.do?method=login", timeout=5.0)
+        dump.add("门户可达性检查", f"状态={probe.status} err={probe.error}")
         logger.log(
             f"[数据] 门户可达性检查 状态={probe.status} err={probe.error[:100]}"
         )
@@ -299,7 +335,7 @@ def try_authenticate(
     # 会话残留：eportal 认为已认证但没有参数 → 空参数强制刷新
     if not index_params and "redirectortosuccess" in portal_url:
         logger.log("eportal 显示已认证但网络不通，强制刷新认证会话")
-        ok, message = login(host, "", username, password, logger, stop)
+        ok, message = login(host, "", username, password, logger, stop, dump)
         if not ok:
             raise AuthFailed(message)
         _wait_online(stop, logger)
@@ -312,7 +348,7 @@ def try_authenticate(
     keys = [key for key, _ in urllib.parse.parse_qsl(index_params, keep_blank_values=True)]
     logger.log(f"[数据] 认证参数键={keys} 长度={len(index_params)}")
 
-    ok, message = login(host, index_params, username, password, logger, stop)
+    ok, message = login(host, index_params, username, password, logger, stop, dump)
     if not ok:
         raise AuthFailed(message)
 
@@ -321,11 +357,10 @@ def try_authenticate(
 
 
 def _wait_online(stop: threading.Event, logger) -> None:
+    """认证提交后复检：先探一次，未通再等待，避免"网关秒放行也要空等 5 秒"。"""
     deadline = time.monotonic() + WAIT_PROBE_MAX
     attempt = 0
-    while time.monotonic() < deadline:
-        if _sleep(stop, WAIT_PROBE_GAP):
-            raise AuthStopped()
+    while True:
         attempt += 1
         started = time.monotonic()
         online = net.check_online(logger, stop=stop)
@@ -337,4 +372,8 @@ def _wait_online(stop: threading.Event, logger) -> None:
         )
         if online:
             return
+        if time.monotonic() >= deadline:
+            break
+        if _sleep(stop, WAIT_PROBE_GAP):
+            raise AuthStopped()
     raise AuthFailed(f"认证已提交，但等待 {WAIT_PROBE_MAX} 秒后网络仍未连通")

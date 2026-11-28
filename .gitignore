@@ -7,6 +7,12 @@ __pycache__/
 *.py[cod]
 pip-ephem-wheel-cache-*/
 
+# 测试 / 静态检查缓存
+.pytest_cache/
+.ruff_cache/
+.coverage
+pytest-of-*/
+
 # PyInstaller 产物
 build/
 dist/
@@ -16,6 +22,9 @@ dist/
 fuxin_config.dat
 fuxin_log.txt
 fuxin_log_*.txt
+
+# 认证失败诊断现场（可能含网关原始响应，不入库）
+fuxin_dump_*.txt
 
 # 编辑器
 .vscode/

@@ -18,7 +18,6 @@ import base64
 import hashlib
 import os
 import threading
-from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -68,7 +67,7 @@ class Config:
     def load(self) -> None:
         path = paths.config_path()
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            with open(path, encoding="utf-8", errors="replace") as fh:
                 raw = fh.read()
         except FileNotFoundError:
             return

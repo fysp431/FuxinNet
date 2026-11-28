@@ -169,15 +169,24 @@ class Logger:
 
     # ---------- 导出 ----------
     def export(self, dest_path: str) -> str:
-        """导出内存中的日志到指定文件（UTF-8 + CRLF）。"""
-        rows = self.snapshot(limit=self.max_entries)
-        with open(dest_path, "w", encoding="utf-8", newline="") as fh:
-            for row in rows:
-                fh.write(f"{row['time']}  {row['text']}\r\n")
-        return dest_path
+        """导出落盘日志（含 .1~.3 轮转历史），UTF-8 + 原样行尾。
 
-    def log_exists(self) -> bool:
-        try:
-            return os.path.getsize(self.path) > 0
-        except OSError:
-            return False
+        直接拼接文件而不是内存快照：落盘行本身带 ``[yyyy-MM-dd HH:mm:ss]``
+        完整时间戳，跨天导出不会丢失日期，也能导出内存缓冲之外的更早记录。
+        日志文件尚未产生（例如只读目录且回退失败）时退回内存快照。
+        """
+        parts: list[str] = []
+        for name in (f"{self.path}.3", f"{self.path}.2", f"{self.path}.1", self.path):
+            try:
+                with open(
+                    name, encoding="utf-8", errors="replace", newline=""
+                ) as fh:
+                    parts.append(fh.read())
+            except FileNotFoundError:
+                continue
+        if not parts:
+            rows = self.snapshot(limit=self.max_entries)
+            parts = [f"[{row['time']}] {row['text']}\r\n" for row in rows]
+        with open(dest_path, "w", encoding="utf-8", newline="") as fh:
+            fh.write("".join(parts))
+        return dest_path

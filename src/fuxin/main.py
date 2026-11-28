@@ -11,6 +11,7 @@ import platform
 import sys
 import time
 import traceback
+from ctypes import wintypes
 
 from . import autostart, net, paths
 from .api import Api
@@ -23,6 +24,18 @@ try:
     import webview
 except Exception:  # pragma: no cover - 仅打包环境异常时提示
     webview = None
+
+_ERROR_ALREADY_EXISTS = 183
+_single_instance_handle = None
+
+# 单一 kernel32 实例：ctypes.WinDLL 每次调用返回的是同一对象，但 ctypes.windll.kernel32
+# 是另一个包装，两者 argtypes 不共享。acquire 与 release 必须用同一个句柄对象，
+# 否则 release 时 HANDLE 会按默认 c_int 传参，64 位下可能被截断。
+_KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_KERNEL32.CreateMutexW.restype = wintypes.HANDLE
+_KERNEL32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+_KERNEL32.CloseHandle.restype = wintypes.BOOL
+_KERNEL32.CloseHandle.argtypes = [wintypes.HANDLE]
 
 
 def enable_dpi_awareness() -> None:
@@ -44,15 +57,31 @@ def enable_dpi_awareness() -> None:
 
 
 def acquire_single_instance() -> bool:
-    """返回 True 表示本进程持有实例锁；False 表示已有实例在跑。"""
-    kernel32 = ctypes.windll.kernel32
-    handle = kernel32.CreateMutexW(None, False, paths.MUTEX_NAME)
+    """返回 True 表示本进程持有实例锁；False 表示已有实例在跑。
+
+    显式声明 ctypes 签名：64 位下 HANDLE 是 64 位指针，默认按 c_int 解析会截断。
+    """
+    global _single_instance_handle
+    handle = _KERNEL32.CreateMutexW(None, False, paths.MUTEX_NAME)
     if not handle:
         return True
-    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+    if ctypes.get_last_error() == _ERROR_ALREADY_EXISTS:
+        _KERNEL32.CloseHandle(handle)
         return False
-    globals()["_MUTEX_HANDLE"] = handle  # 保持引用，进程存活期间不释放
+    _single_instance_handle = handle  # 保持引用，进程存活期间不释放
     return True
+
+
+def release_single_instance() -> None:
+    """进程退出前显式关闭互斥量句柄（系统虽会回收，显式关闭更规范）。"""
+    global _single_instance_handle
+    handle, _single_instance_handle = _single_instance_handle, None
+    if handle is None:
+        return
+    try:
+        _KERNEL32.CloseHandle(handle)
+    except Exception:
+        pass
 
 
 def _show_message(text: str, title: str) -> None:
@@ -90,12 +119,20 @@ def main() -> int:
         witness_existing_instance()
         return 0
 
+    try:
+        return _run_app(start_minimized)
+    finally:
+        release_single_instance()
+
+
+def _run_app(start_minimized: bool) -> int:
     if webview is None:
         _show_message("缺少 pywebview 依赖，无法启动界面", paths.APP_NAME)
         return 1
 
     logger = Logger(paths.log_path())
     logger.log(f"========== {paths.APP_NAME} {paths.APP_VERSION} 启动 ==========")
+    logger.log(paths.data_dir_note())
     logger.log(f"程序目录：{paths.app_dir()}")
     logger.log(
         f"[环境] Python {platform.python_version()} / {platform.platform()} / "
@@ -107,7 +144,7 @@ def main() -> int:
     marker = paths.running_marker_path()
     if os.path.exists(marker):
         try:
-            with open(marker, "r", encoding="utf-8", errors="replace") as fh:
+            with open(marker, encoding="utf-8", errors="replace") as fh:
                 detail = fh.read().strip()
         except OSError:
             detail = ""
@@ -128,6 +165,8 @@ def main() -> int:
         logger.log(f"写入运行标记失败：{exc}")
 
     config = Config(logger)
+    if config.load_error:
+        logger.log(f"配置读取异常的提示已通过界面展示：{config.load_error}")
     logger.log(
         f"[环境] 检测频率={config.freq_value()}秒/次 自启作用域={config.autostart_scope}"
     )
@@ -327,7 +366,7 @@ def main() -> int:
             debug=False,
             private_mode=False,
             http_server=True,
-            storage_path=os.path.join(paths.app_dir(), "webview_data"),
+            storage_path=os.path.join(paths.data_dir(), "webview_data"),
         )
     except Exception:
         logger.log("主界面启动失败：" + traceback.format_exc(limit=5))

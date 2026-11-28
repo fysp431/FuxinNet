@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from . import paths
 
@@ -28,7 +28,7 @@ class Tray:
         self.on_show = on_show
         self.on_quit = on_quit
         self._icon = None
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._running = False
         self._available = True
 

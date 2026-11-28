@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
 
 SCOPE_USER = "user"
 SCOPE_SYSTEM = "system"
@@ -28,7 +27,7 @@ SCOPES = (SCOPE_USER, SCOPE_SYSTEM)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
-def normalize_scope(scope: Optional[str]) -> str:
+def normalize_scope(scope: str | None) -> str:
     value = (scope or SCOPE_USER).strip().lower()
     return value if value in SCOPES else SCOPE_USER
 
@@ -46,7 +45,7 @@ def _exe_path() -> str:
     return ""
 
 
-def _value_data() -> Optional[str]:
+def _value_data() -> str | None:
     exe = _exe_path()
     if not exe:
         return None

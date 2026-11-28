@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# 构建 / 测试期依赖（运行程序本身不需要）
+pyinstaller==6.22.3
+ruff
+pytest
