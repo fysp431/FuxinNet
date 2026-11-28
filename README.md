@@ -15,7 +15,7 @@
 
 ---
 
-[这是什么](#这是什么) · [功能特性](#功能特性) · [下载与安装](#下载与安装) · [快速上手](#快速上手) · [使用说明](#使用说明) · [工作原理](#工作原理) · [常见问题](#常见问题) · [技术栈](#技术栈) · [目录结构](#目录结构) · [本地开发](#本地开发) · [打包](#打包) · [运行期文件](#运行期文件) · [免责声明](#免责声明) · [许可证](#许可证) · [作者](#作者)
+[这是什么](#这是什么) · [功能特性](#功能特性) · [下载与安装](#下载与安装) · [快速上手](#快速上手) · [使用说明](#使用说明) · [工作原理](#工作原理) · [常见问题](#常见问题) · [技术栈](#技术栈) · [目录结构](#目录结构) · [本地开发](#本地开发) · [打包](#打包) · [运行期文件](#运行期文件) · [更新记录](#更新记录) · [免责声明](#免责声明) · [许可证](#许可证) · [作者](#作者)
 
 ---
 
@@ -36,7 +36,7 @@
 - 自动跟随门户跳转链（302 链 + 200 页面的 JS/meta 跳转，最多 6 跳），提取 `index.jsp?…` 认证参数
 - 密码按网关要求做 **RSA PKCS#1 v1.5** 加密（十进制串回传）；公钥缺失或密码超长时直接报错，不再回退明文
 - 会话残留处理：落到 `redirectortosuccess` 且无参数时，用空参数强制刷新认证会话
-- 认证提交后每 5 秒复检、最长等 60 秒，确认真的通了才算成功
+- 认证提交后**立即复检**一次，未通则每 5 秒重试、最长 60 秒，确认真的通了才算成功
 
 **守护与重试**
 
@@ -85,13 +85,13 @@
 ## 下载与安装
 
 1. 到 [Releases](https://github.com/fysp431/FuxinNet/releases/latest) 下载 `FuxinNet_v2.0.1.exe`（或自行编译，见下文）
-2. **建议放到独立文件夹**，不要直接在压缩包里双击运行
+2. **建议放到独立文件夹**，不要直接在桌面双击运行
 3. 双击启动。首次运行可能出现「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」  
    （程序没有购买代码签名证书，属正常现象）
 4. 需要 **WebView2 运行时**：Win11 与较新的 Win10 自带 Edge 即可；若提示无法初始化界面内核，  
    安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 后重试
 
-> 首次运行会在程序目录生成 `fuxin_log.txt`、`fuxin_config.dat`、`fuxin_running.marker`、`webview_data\`，属正常产物；该目录不可写时会自动改到 `%LOCALAPPDATA%\FuxinNet\`。
+> 首次运行会在程序目录生成 `fuxin_log.txt`、`fuxin_running.marker`、`webview_data\` 和 `<exe>.config`（`fuxin_config.dat` 在首次保存账号或频率后生成），属正常产物；该目录不可写时会自动改到 `%LOCALAPPDATA%\FuxinNet\`。
 
 ## 快速上手
 
@@ -116,6 +116,7 @@
 | 关闭窗口 | 隐藏到托盘，后台继续运行                          |
 | 真正退出 | 托盘右键 →「退出」（会先停止检测并写日志）                |
 | 关机/注销 | 记录「系统关机或注销，非用户操作」后放行，不阻塞系统关机；若进程被强杀，下次启动补记异常关闭 |
+| 查看版本 | 右键 exe →「属性」→「详细信息」，可看到「文件版本 / 产品版本」；界面底部页脚与托盘悬停提示也会显示 `v2.0.1` |
 | 日志   | 程序目录（不可写时回退 `%LOCALAPPDATA%\FuxinNet`）的 `fuxin_log.txt`，也可在界面「导出日志」 |
 
 ## 工作原理
@@ -138,7 +139,7 @@ POST /eportal/InterFace.do?method=login
     ↓
 解析 {"result":"success"} 或 {"result":"fail","message":"…"}（含 \uXXXX 解码）
     ↓
-每 5 秒复检，最多 60 秒；成功即恢复守护
+立即复检，未通则每 5 秒重试，最多 60 秒；成功即恢复守护
 ```
 
 失败分类处理：**凭据错误**与**网关公钥异常**立即停止；**网络类失败** 30 秒后重试，连续 3 次停止。
@@ -200,10 +201,19 @@ POST /eportal/InterFace.do?method=login
 
 <details>
 
+<summary><b>怎么查看当前版本？</b></summary>
+
+右键 exe →「属性」→「详细信息」，可看到「文件版本 / 产品版本」为 `2.0.1`；  
+界面底部页脚、托盘图标悬停提示也会显示 `v2.0.1`。
+
+</details>
+
+<details>
+
 <summary><b>放在 Program Files 里，设置和日志去哪了？</b></summary>
 
 程序目录不可写时，运行期文件会自动切换到 `%LOCALAPPDATA%\FuxinNet\`，并把旧位置的
-`fuxin_config.dat` 复制过去；启动日志第一行会写明本次使用的数据目录。
+`fuxin_config.dat` 复制过去；启动日志开头会写明本次使用的数据目录。
 
 </details>
 
@@ -242,7 +252,8 @@ POST /eportal/InterFace.do?method=login
 | 后端 | Python 3.11（`http.client` 直连，无第三方 HTTP 依赖） |
 | 加密 | cryptography（AES-GCM）                      |
 | 托盘 | pystray + Pillow                           |
-| 打包 | PyInstaller（单文件）                           |
+| 打包 | PyInstaller（单文件 / 免解压目录版）                 |
+| 版本信息 | PyInstaller 版本资源（打包时由 `version_info.py` 生成，右键属性可见） |
 | 关闭判定 | WinForms `FormClosing` + `CloseReason`（区分系统关机 / 点 X / 主动退出） |
 
 ## 目录结构
@@ -255,6 +266,8 @@ POST /eportal/InterFace.do?method=login
 ├─ requirements.txt       # 运行期依赖
 ├─ requirements-dev.txt   # 构建 / 测试期依赖
 ├─ pyproject.toml         # ruff / pytest 配置
+├─ .github/workflows/
+│  └─ ci.yml              # push / PR 自动跑 ruff + pytest
 ├─ version_info.py        # 生成 exe 的 Windows 版本资源（属性面板可看版本）
 ├─ assets/                # 图标
 ├─ docs/                  # 截图
@@ -305,7 +318,17 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 
 产物：`dist\FuxinNet_v2.0.1.exe`（单文件）。
 
-产物名中的版本号由 `src/fuxin/paths.py` 的 `APP_VERSION` 自动生成，发版时只改该常量即可，无需再动 spec。
+目录版（免解压，行为一致）：
+
+```bat
+python -m PyInstaller --noconfirm --clean fuxin_portable.spec
+```
+
+产物：`dist\FuxinNet_v2.0.1\`。
+
+产物名与「右键 → 属性 → 详细信息」中的文件版本 / 产品版本都来自
+`src/fuxin/paths.py` 的 `APP_VERSION`（打包时由 `version_info.py` 生成版本资源），
+发版时只改该常量即可，无需再动 spec。
 
 
 已经在 spec/代码里处理掉的四个坑（改配置时别删）：
@@ -331,6 +354,23 @@ python -m PyInstaller --noconfirm --clean fuxin.spec
 | `fuxin_dump_*.txt`       | 认证失败诊断现场（pageInfo / login 原始响应 + 跳转链，已脱敏，单份 ≤ 256 KB；仅在失败时生成） |
 | `fuxin_log_export_*.txt` | 「导出日志」的副本，包含 `.1`~`.3` 轮转历史与完整日期时间戳 |
 | `webview_data\`          | WebView2 缓存，可删                  |
+| `<exe>.config`           | 首次运行由 `run.py` 自动生成，为 .NET 打开 `loadFromRemoteSources`；删除后下次启动会重建 |
+
+单文件版启动时还会把运行库解压到 `%LOCALAPPDATA%\FuxinNet\tmp\_MEI*`，退出后自动清理，一般无需手动处理。
+
+## 更新记录
+
+### v2.0.1（2026-11-28）
+
+- 新增 Windows 版本资源：右键 exe →「属性」→「详细信息」可直接查看版本
+- 配置保存失败时显示可读原因并回滚本次修改，不再把异常抛到界面
+- 程序目录不可写时自动回退 `%LOCALAPPDATA%\FuxinNet`，并迁移旧配置
+- 认证失败时落盘脱敏诊断文件（pageInfo / login / 跳转链，单份 ≤ 256 KB）
+- 三源连通性探测改为并发，最坏耗时约 5 秒，避免拖慢 10 秒最小间隔
+- 学号 / 密码增加前后端 ASCII 白名单校验；自启开关状态统一由界面渲染函数回写
+- 认证成功后正确返回在线状态；认证后复检改为「先探一次，未通再等 5 秒」
+- 日志导出改为拼接轮转历史，保留完整日期时间戳
+- 引入 ruff、pytest 与 GitHub Actions CI，测试统一迁移到 `tests/`
 
 ## 免责声明
 
