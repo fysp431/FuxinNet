@@ -4,12 +4,14 @@
 构建（必须用 Python 3.11 + pythonnet 3.0.5 的环境）：
     python -m PyInstaller --noconfirm --clean fuxin.spec
 
-产物名形如 FuxinNet_v2.0.1-alpha2.exe：版本号自动从 src/fuxin/paths.py 的
+产物名形如 FuxinNet_v2.0.1.exe：版本号自动从 src/fuxin/paths.py 的
 APP_VERSION 读取，发版时只需改 paths.py 一处，无需再同步本文件。
+同时自动写入 Windows 版本资源，可在「右键 → 属性 → 详细信息」查看版本。
 """
 
 import os
 import re
+import sys
 
 from PyInstaller.utils.hooks import collect_all
 
@@ -28,6 +30,15 @@ def _read_version() -> str:
 
 _VERSION = _read_version()
 EXE_NAME = f"FuxinNet_{_VERSION}" if _VERSION else "FuxinNet"
+
+# 版本资源：右键 → 属性 → 详细信息里显示的「文件版本 / 产品版本」
+_BASE = globals().get("SPECPATH") or os.getcwd()
+if _BASE not in sys.path:
+    sys.path.insert(0, _BASE)
+
+from version_info import write_version_file  # noqa: E402
+
+_VERSION_FILE = write_version_file(_VERSION, EXE_NAME, os.path.join(_BASE, "build"))
 
 datas = [
     ("ui", "ui"),
@@ -82,5 +93,5 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     icon="assets/icon.ico",
-    version=None,
+    version=_VERSION_FILE,
 )
